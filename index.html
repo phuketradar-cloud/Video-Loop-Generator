@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Loop Generator — สร้างวิดีโอลูปไร้รอยต่อ</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --panel-2: #22262f;
+    --border: #2e333d;
+    --text: #e6e8eb;
+    --muted: #9aa1ab;
+    --accent: #4f8cff;
+    --accent-2: #3ddc97;
+    --danger: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 24px 20px 8px;
+    text-align: center;
+  }
+  header h1 { font-size: 22px; margin: 0 0 6px; }
+  header p { color: var(--muted); margin: 0; font-size: 14px; }
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 20px;
+    display: grid;
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: var(--accent);
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag { border-color: var(--accent); background: var(--panel-2); }
+  .dropzone input { display: none; }
+  video {
+    width: 100%;
+    border-radius: 8px;
+    background: #000;
+    display: block;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input[type=number], select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); border: 1px solid var(--border); }
+  .progress-outer {
+    width: 100%;
+    height: 10px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .15s;
+  }
+  .status-text { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  a.download-btn {
+    display: inline-block;
+    background: var(--accent-2);
+    color: #06251a;
+    font-weight: 700;
+    text-decoration: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    margin-top: 10px;
+  }
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 20px;
+  }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details pre {
+    white-space: pre-wrap;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--panel-2);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎞️ Video Loop Generator</h1>
+  <p>สร้างวิดีโอลูปต่อเนื่องแบบไร้รอยต่อ (seamless loop) ทำงานทั้งหมดในเบราว์เซอร์ ไม่มีการอัปโหลดขึ้นเซิร์ฟเวอร์</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card" id="uploadCard">
+    <h2>1. เลือกวิดีโอต้นฉบับ</h2>
+    <div class="dropzone" id="dropzone">
+      <p>📁 ลากไฟล์วิดีโอมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
+      <p class="hint">แนะนำคลิปสั้น 2–8 วินาที ที่มีการเคลื่อนไหวสม่ำเสมอ (ผม เสื้อผ้า สภาพแวดล้อม) เพื่อให้จุดต่อภาพเนียนที่สุด</p>
+      <input type="file" id="fileInput" accept="video/*">
+    </div>
+    <video id="sourcePreview" controls style="display:none; margin-top:12px;"></video>
+  </div>
+
+  <div class="card" id="settingsCard" style="display:none;">
+    <h2>2. ตั้งค่าการสร้างลูป</h2>
+    <div class="grid2">
+      <div>
+        <label for="loopCount">จำนวนรอบที่จะวนซ้ำ (Loop count)</label>
+        <input type="number" id="loopCount" min="2" max="12" value="3">
+        <div class="hint">คลิปต้นฉบับจะถูกเล่นซ้ำกี่รอบในวิดีโอผลลัพธ์</div>
+      </div>
+      <div>
+        <label for="blendDuration">ระยะเวลาผสานรอยต่อ (วินาที)</label>
+        <input type="number" id="blendDuration" min="0.1" max="3" step="0.1" value="0.5">
+        <div class="hint">ช่วงท้ายของแต่ละรอบจะถูก crossfade เข้ากับช่วงต้นของรอบถัดไป เพื่อกลบรอยต่อ</div>
+      </div>
+      <div>
+        <label for="fps">เฟรมเรตของผลลัพธ์ (FPS)</label>
+        <select id="fps">
+          <option value="24">24</option>
+          <option value="30" selected>30</option>
+          <option value="25">25</option>
+        </select>
+      </div>
+      <div>
+        <label>ข้อมูลคลิปต้นฉบับ</label>
+        <div class="badge" id="sourceInfo">–</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label style="display:flex; align-items:center; gap:8px; margin:0;">
+        <input type="checkbox" id="autoSeam" checked style="width:auto;">
+        <span>ค้นหาจุดตัดที่เนียนที่สุดอัตโนมัติ + motion-aware blending (แนะนำ)</span>
+      </label>
+    </div>
+    <div class="hint" style="margin-top:2px;">ค้นหาเฟรมช่วงต้น/ท้ายที่คล้ายกันที่สุดเพื่อตัดต่อ แล้วชดเชยการเคลื่อนไหว (pan/drift) ก่อนผสานภาพ ให้จุดต่อเนียนกว่าการ crossfade แบบตรง ๆ</div>
+    <div class="row" style="margin-top:14px;">
+      <button id="generateBtn">▶️ สร้างวิดีโอลูป</button>
+      <span class="hint">วิดีโอผลลัพธ์ยังไม่มีเสียง (video-only) ในเวอร์ชันนี้</span>
+    </div>
+  </div>
+
+  <div class="card" id="progressCard" style="display:none;">
+    <h2>3. กำลังประมวลผล</h2>
+    <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
+    <div class="status-text" id="statusText">กำลังเตรียมข้อมูล...</div>
+    <div class="error" id="errorText" style="display:none;"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>4. ผลลัพธ์</h2>
+    <video id="resultPreview" controls loop></video>
+    <div>
+      <a id="downloadLink" class="download-btn" download="seamless-loop.webm">⬇️ ดาวน์โหลดวิดีโอ (.webm)</a>
+      <button class="secondary" id="resetBtn" style="margin-left:8px;">เริ่มใหม่</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>เกี่ยวกับเครื่องมือนี้ / โจทย์ต้นฉบับ (AI prompt ที่ใช้เป็นแนวทาง)</summary>
+      <p class="hint">เครื่องมือนี้เป็นการประมาณผล (practical approximation) ของโจทย์ด้านล่าง โดยไม่ต้องพึ่ง AI video generation API ภายนอกใด ๆ — ทำงานแบบออฟไลน์ทั้งหมดในเบราว์เซอร์ด้วย HTML5 Canvas โดยใช้เทคนิค frame extraction + การค้นหาจุดตัดที่เนียนที่สุดอัตโนมัติ + motion-aware crossfade blending ที่จุดต่อรอบ (แทนการสร้างเฟรมใหม่ด้วยโมเดล generative video ตามที่ prompt ระบุไว้ตามตัวอักษร — จึงยังมีข้อจำกัดเรื่องความเนียนเมื่อเทียบกับโมเดล AI จริง)</p>
+      <p class="hint"><strong>Prompt ต้นฉบับ:</strong></p>
+      <pre id="promptText"></pre>
+      <p class="hint" style="margin-top:12px;"><strong>Prompt ฉบับปรับปรุง (เน้นความเนียนของจุดวนลูป):</strong></p>
+      <pre id="promptTextV2"></pre>
+    </details>
+  </div>
+
+</div>
+
+<footer>Video Loop Generator — โปรเจกต์แยกต่างหาก ไม่ได้เป็นส่วนหนึ่งของระบบ CAMS</footer>
+
+<script>
+const ORIGINAL_PROMPT = `Create a seamless extended video loop from this short source clip.
+
+Preserve the original character, environment, composition, lighting, camera angle, colors, and visual style exactly.
+
+Extend the video by intelligently looping the source footage multiple times.
+
+The transition between the end and beginning of every loop must be completely seamless and invisible.
+
+Analyze the motion trajectory and timing of the original clip, then create smooth transitional frames between the ending and starting frames.
+
+Maintain continuous and natural motion throughout the entire extended video:
+- hair and clothing movement
+- blinking
+- breathing
+- subtle body movement
+- environmental motion
+- particles and atmospheric effects
+- lighting changes
+
+Avoid any visible jump, freeze frame, sudden repositioning, duplicated motion, temporal discontinuity, or unnatural acceleration/deceleration.
+
+Use seamless motion interpolation and temporal blending where necessary.
+
+The final video should feel like ONE continuous uninterrupted shot rather than repeated footage.
+
+Do not introduce new objects, characters, camera angles, facial changes, or environmental changes.
+
+Keep the subject's identity and appearance perfectly consistent.
+
+Camera movement must remain continuous and stable.
+
+Make the first frame and final frame naturally connect so the video can play repeatedly forever without the viewer noticing the loop point.
+
+Output: smooth cinematic seamless loop, consistent motion, no flicker, no warping, no frame jump, no visual discontinuity.`;
+document.getElementById('promptText').textContent = ORIGINAL_PROMPT;
+
+const PROMPT_V2 = `Turn this short clip into a perfectly seamless cinematic infinite loop.
+
+Keep the character completely consistent and preserve the original composition.
+
+Only maintain subtle natural movements:
+gentle hair movement, soft fabric movement, slow breathing, occasional natural blinking, and very subtle environmental motion.
+
+Do not change the character's face, pose, body proportions, clothing, background, or camera composition.
+
+Create a seamless transition between the end and beginning of each cycle using motion-aware temporal blending.
+
+No jump cut.
+No freeze frame.
+No sudden movement.
+No duplicated frames.
+No flickering.
+No facial deformation.
+No identity change.
+No camera shake.
+
+The final frame must naturally flow back into the first frame.
+
+The result should look like a single continuous shot that can loop infinitely without the viewer noticing the repetition.`;
+document.getElementById('promptTextV2').textContent = PROMPT_V2;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const sourcePreview = document.getElementById('sourcePreview');
+const settingsCard = document.getElementById('settingsCard');
+const sourceInfo = document.getElementById('sourceInfo');
+const generateBtn = document.getElementById('generateBtn');
+const progressCard = document.getElementById('progressCard');
+const progressBar = document.getElementById('progressBar');
+const statusText = document.getElementById('statusText');
+const errorText = document.getElementById('errorText');
+const resultCard = document.getElementById('resultCard');
+const resultPreview = document.getElementById('resultPreview');
+const downloadLink = document.getElementById('downloadLink');
+const resetBtn = document.getElementById('resetBtn');
+
+let sourceFile = null;
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.type.startsWith('video/')) {
+    alert('กรุณาเลือกไฟล์วิดีโอ');
+    return;
+  }
+  sourceFile = file;
+  const url = URL.createObjectURL(file);
+  sourcePreview.src = url;
+  sourcePreview.style.display = 'block';
+  sourcePreview.onloadedmetadata = () => {
+    sourceInfo.textContent =
+      `${sourcePreview.videoWidth}×${sourcePreview.videoHeight} · ${sourcePreview.duration.toFixed(2)}s`;
+    settingsCard.style.display = 'block';
+  };
+}
+
+generateBtn.addEventListener('click', () => {
+  generateLoop().catch((err) => {
+    console.error(err);
+    errorText.style.display = 'block';
+    errorText.textContent = 'เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : String(err));
+  });
+});
+
+resetBtn.addEventListener('click', () => {
+  resultCard.style.display = 'none';
+  progressCard.style.display = 'none';
+  errorText.style.display = 'none';
+  fileInput.value = '';
+});
+
+function setProgress(pct, text) {
+  progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  statusText.textContent = text;
+}
+
+function seekTo(video, time) {
+  return new Promise((resolve) => {
+    const onSeeked = () => {
+      video.removeEventListener('seeked', onSeeked);
+      resolve();
+    };
+    video.addEventListener('seeked', onSeeked);
+    video.currentTime = time;
+  });
+}
+
+async function extractFrames(video, fps, onProgress) {
+  const duration = video.duration;
+  const frameCount = Math.max(2, Math.round(duration * fps));
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  const frames = [];
+  for (let i = 0; i < frameCount; i++) {
+    const t = Math.min(duration - 1e-3, i / fps);
+    await seekTo(video, t);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    frames.push(await createImageBitmap(canvas));
+    onProgress((i + 1) / frameCount);
+  }
+  return frames;
+}
+
+// --- Seam-finding + motion estimation helpers (motion-aware blending) ---
+
+function thumbLuma(img, tw, th, ctx) {
+  ctx.clearRect(0, 0, tw, th);
+  ctx.drawImage(img, 0, 0, tw, th);
+  const d = ctx.getImageData(0, 0, tw, th).data;
+  const out = new Float32Array(tw * th);
+  for (let p = 0, di = 0; p < tw * th; p++, di += 4) {
+    out[p] = 0.299 * d[di] + 0.587 * d[di + 1] + 0.114 * d[di + 2];
+  }
+  return out;
+}
+
+function diffLuma(a, b) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = a[i] - b[i];
+    s += d * d;
+  }
+  return s;
+}
+
+function shiftedDiff(a, b, tw, th, dx, dy) {
+  let s = 0, count = 0;
+  for (let y = 0; y < th; y++) {
+    const sy = y + dy;
+    if (sy < 0 || sy >= th) continue;
+    for (let x = 0; x < tw; x++) {
+      const sx = x + dx;
+      if (sx < 0 || sx >= tw) continue;
+      const d = a[y * tw + x] - b[sy * tw + sx];
+      s += d * d;
+      count++;
+    }
+  }
+  return count > 0 ? s / count : Infinity;
+}
+
+// Find (dx, dy) so that `b` translated by (dx, dy) best matches `a`.
+function estimateShift(a, b, tw, th, maxShift) {
+  let best = { dx: 0, dy: 0, score: Infinity };
+  for (let dy = -maxShift; dy <= maxShift; dy++) {
+    for (let dx = -maxShift; dx <= maxShift; dx++) {
+      const score = shiftedDiff(a, b, tw, th, dx, dy);
+      if (score < best.score) best = { dx, dy, score };
+    }
+  }
+  return best;
+}
+
+// Search the head/tail regions of the clip for the pair of frames that are
+// most visually similar, so trimming to that pair produces a naturally
+// smoother cut than always forcing the very first/last captured frame.
+function findBestSeam(frames, maxTrim, tw, th) {
+  const n = frames.length;
+  maxTrim = Math.min(maxTrim, Math.floor(n / 4));
+  if (maxTrim <= 0) return { startTrim: 0, endTrim: 0 };
+
+  const canvas = document.createElement('canvas');
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const startThumbs = [];
+  const endThumbs = [];
+  for (let i = 0; i <= maxTrim; i++) startThumbs.push(thumbLuma(frames[i], tw, th, ctx));
+  for (let i = 0; i <= maxTrim; i++) endThumbs.push(thumbLuma(frames[n - 1 - i], tw, th, ctx));
+
+  let best = { startTrim: 0, endTrim: 0, score: Infinity };
+  for (let s = 0; s <= maxTrim; s++) {
+    for (let e = 0; e <= maxTrim; e++) {
+      const score = diffLuma(startThumbs[s], endThumbs[e]);
+      if (score < best.score) best = { startTrim: s, endTrim: e, score };
+    }
+  }
+  return best;
+}
+
+// Build the looped + crossfaded frame sequence.
+// Every loop's tail (last `blendFrames` frames) is blended into the head of
+// the next loop (the final loop wraps back onto the head of frame 0), so the
+// clip can repeat forever without a visible seam. `motionShift` (optional)
+// translates the incoming frame during the blend to compensate for slow
+// pan/drift between the tail and head, reducing double-exposure ghosting.
+function buildLoopedSequence(frames, loopCount, blendFrames, motionShift) {
+  const n = frames.length;
+  blendFrames = Math.min(blendFrames, Math.floor(n / 2));
+  const canvas = document.createElement('canvas');
+  const first = frames[0];
+  canvas.width = first.width;
+  canvas.height = first.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const dxFull = motionShift ? motionShift.dx : 0;
+  const dyFull = motionShift ? motionShift.dy : 0;
+
+  const sequence = [];
+  for (let loop = 0; loop < loopCount; loop++) {
+    for (let i = 0; i < n; i++) {
+      const tailStart = n - blendFrames;
+      if (blendFrames > 0 && i >= tailStart) {
+        const localIdx = i - tailStart; // 0..blendFrames-1
+        const t = (localIdx + 1) / (blendFrames + 1); // 0 -> 1
+        const alpha = t * t * (3 - 2 * t); // smoothstep easing, gentler than linear
+        const shiftFactor = 1 - alpha; // fully aligned early in the blend, settles to 0 by the end
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1;
+        ctx.drawImage(frames[i], 0, 0);
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(frames[localIdx], dxFull * shiftFactor, dyFull * shiftFactor);
+        ctx.globalAlpha = 1;
+        sequence.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+      } else {
+        sequence.push(frames[i]);
+      }
+    }
+  }
+  return sequence;
+}
+
+function pickMimeType() {
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  for (const c of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
+}
+
+async function encodeSequence(sequence, width, height, fps, onProgress) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  const stream = canvas.captureStream(fps);
+  const mimeType = pickMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+  const done = new Promise((resolve) => { recorder.onstop = resolve; });
+  recorder.start();
+
+  const frameDuration = 1000 / fps;
+  const drawFrame = (frame) => {
+    if (frame instanceof ImageData) {
+      ctx.putImageData(frame, 0, 0);
+    } else {
+      ctx.drawImage(frame, 0, 0, width, height);
+    }
+  };
+
+  for (let i = 0; i < sequence.length; i++) {
+    drawFrame(sequence[i]);
+    onProgress((i + 1) / sequence.length);
+    await new Promise((r) => setTimeout(r, frameDuration));
+  }
+
+  recorder.stop();
+  await done;
+  return new Blob(chunks, { type: mimeType || 'video/webm' });
+}
+
+async function generateLoop() {
+  if (!sourceFile) return;
+  errorText.style.display = 'none';
+  generateBtn.disabled = true;
+  resultCard.style.display = 'none';
+  progressCard.style.display = 'block';
+
+  const loopCount = Math.max(2, Math.min(12, parseInt(document.getElementById('loopCount').value, 10) || 3));
+  const blendSeconds = Math.max(0.05, Math.min(3, parseFloat(document.getElementById('blendDuration').value) || 0.5));
+  const fps = parseInt(document.getElementById('fps').value, 10) || 30;
+  const autoSeam = document.getElementById('autoSeam').checked;
+
+  const video = document.createElement('video');
+  video.muted = true;
+  video.src = URL.createObjectURL(sourceFile);
+  await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  const blendFrames = Math.max(1, Math.round(blendSeconds * fps));
+
+  setProgress(0, 'กำลังแยกเฟรมจากวิดีโอต้นฉบับ...');
+  let frames = await extractFrames(video, fps, (p) => {
+    setProgress(p * 30, `กำลังแยกเฟรม... (${Math.round(p * 100)}%)`);
+  });
+
+  let motionShift = null;
+  if (autoSeam && frames.length > 4) {
+    setProgress(32, 'กำลังค้นหาจุดตัดที่เนียนที่สุด...');
+    const tw = 64;
+    const th = Math.max(1, Math.round((tw * height) / width));
+    const seam = findBestSeam(frames, blendFrames, tw, th);
+    if (seam.startTrim > 0 || seam.endTrim > 0) {
+      frames = frames.slice(seam.startTrim, frames.length - seam.endTrim);
+    }
+
+    setProgress(38, 'กำลังประเมินการเคลื่อนไหวเพื่อชดเชยรอยต่อ...');
+    const canvas = document.createElement('canvas');
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const tailThumb = thumbLuma(frames[frames.length - 1], tw, th, ctx);
+    const headThumb = thumbLuma(frames[0], tw, th, ctx);
+    const shift = estimateShift(tailThumb, headThumb, tw, th, 6);
+    motionShift = { dx: shift.dx * (width / tw), dy: shift.dy * (height / th) };
+  }
+
+  setProgress(40, 'กำลังผสานรอยต่อระหว่างรอบ (motion-aware crossfade)...');
+  const sequence = buildLoopedSequence(frames, loopCount, blendFrames, motionShift);
+  setProgress(55, `เตรียมลำดับเฟรมทั้งหมด ${sequence.length} เฟรม`);
+
+  setProgress(55, 'กำลังเข้ารหัสวิดีโอผลลัพธ์...');
+  const blob = await encodeSequence(sequence, width, height, fps, (p) => {
+    setProgress(55 + p * 45, `กำลังเข้ารหัส... (${Math.round(p * 100)}%)`);
+  });
+
+  setProgress(100, 'เสร็จสิ้น!');
+  const url = URL.createObjectURL(blob);
+  resultPreview.src = url;
+  downloadLink.href = url;
+  resultCard.style.display = 'block';
+  generateBtn.disabled = false;
+}
+</script>
+</body>
+</html>
