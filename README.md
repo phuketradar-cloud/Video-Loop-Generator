@@ -30,7 +30,15 @@
 10. **Loop Quality Score + Automatic Retry** — วัดคุณภาพจริงที่ seam ภายใน (ไม่ใช่แค่ปลายไฟล์) แล้วให้คะแนน Overall / Motion Continuity / Frame Similarity / Color Continuity / Brightness Continuity / Artifact Score พร้อมลองหลาย strategy/duration ก่อนเลือกตัวที่ดีที่สุด
 11. **Repeat Until Target Duration** — คำนวณจำนวนรอบจากความยาวเป้าหมายที่ตั้งไว้ พร้อม anti-repetition variation (สลับ candidate สำรองทุกรอบเลขคู่ ถ้ามี candidate ที่คะแนนใกล้เคียงกัน) เพื่อลดความรู้สึก pattern ซ้ำในวิดีโอยาว
 12. **Audio Handling** — ตัวเลือก "เก็บเสียงต้นฉบับ" ใช้ Web Audio API วนเสียงพร้อม equal-power crossfade ที่จุดต่อ (ไม่ใช้ FFmpeg)
-13. **Final Encoding** — วาดเฟรมผลลัพธ์ลง canvas แล้วบันทึกผ่าน `canvas.captureStream()` + `MediaRecorder` เลือกได้ทั้ง MP4 (H.264 ถ้าเบราว์เซอร์รองรับ) และ WebM (VP9/AV1) พร้อมคุมบิตเรตตามคุณภาพที่เลือก
+13. **Final Encoding** — สองเส้นทาง เลือกอัตโนมัติ:
+    - **WebCodecs (เร็ว, ค่าเริ่มต้น)** — เข้ารหัสผ่าน `VideoEncoder`/`AudioEncoder` ของเบราว์เซอร์โดยตรง แล้วห่อเป็นไฟล์ .mp4/.webm ด้วยไลบรารี [Mediabunny](https://github.com/Vanilagy/mediabunny) (vendor ไว้ใน `vendor/mediabunny.min.mjs`, MPL-2.0) — **ไม่ต้องรอตามจังหวะเวลาจริง** จึงเร็วกว่า realtime มาก (วิดีโอ 5 นาที ไม่ได้ใช้เวลาประมวลผล 5 นาที)
+    - **MediaRecorder (fallback)** — ใช้ `canvas.captureStream()` + `MediaRecorder` แบบเดิม ทำงาน**แบบ real-time** (ช้ากว่ามาก) — ใช้เมื่อ WebCodecs ใช้ไม่ได้ในเบราว์เซอร์นั้น หรือเปิดไฟล์แบบ `file://` โดยตรง (ES module ถูกบล็อกโดย CORS บน `file://`) ต้องเปิดผ่าน `http(s)://` เท่านั้น (เช่น GitHub Pages) ถึงจะใช้เส้นทาง WebCodecs ได้
+
+## ความเร็วในการประมวลผล
+
+ขั้นตอน Final Encoding ใช้เส้นทาง **WebCodecs ก่อนเสมอ** (เร็วกว่า MediaRecorder มาก เพราะไม่ต้องรอ real-time) และจะ fallback ไป MediaRecorder อัตโนมัติถ้าใช้ไม่ได้ — ดู log ใน "กำลังประมวลผล" ว่าใช้เส้นทางไหน (จะมีข้อความ "ใช้ WebCodecs" หรือ "กลับไปใช้ MediaRecorder")
+
+**ข้อกำหนดสำหรับ WebCodecs**: ต้องเปิดหน้าเว็บผ่าน `http://` หรือ `https://` (ใช้งานได้ปกติบน GitHub Pages/Artifact link) — ถ้าเปิด `index.html` เป็นไฟล์ local โดยตรง (`file://`) จะ fallback ไป MediaRecorder เสมอเพราะเบราว์เซอร์บล็อกการโหลด ES module ข้าม origin แบบนั้น
 
 ## Processing Modes
 
@@ -47,7 +55,7 @@
 
 - **Optical Flow**: ใช้ block-based motion estimation ของ Canvas เอง (regional shift ต่อกริด, พร้อม confidence gate) แทน Farneback/TV-L1/RAFT จริง — เป็นการประมาณ ไม่ใช่ dense optical flow
 - **Frame Interpolation**: ใช้ motion-compensated blending หลายขั้นระหว่างช่วง transition แทนโมเดล AI interpolation (เช่น RIFE)
-- **FFmpeg / OpenCV**: ไม่ได้ใช้จริง — encode ผ่าน Canvas + `MediaRecorder` ของเบราว์เซอร์แทน
+- **FFmpeg / OpenCV**: ไม่ได้ใช้จริง — encode ผ่าน WebCodecs API ของเบราว์เซอร์ (หรือ Canvas + `MediaRecorder` เป็น fallback) แทน
 - **REST API / Job Queue / Storage**: ไม่ได้ implement เพราะไม่มี server — การประมวลผลทั้งหมดทำงาน synchronous ในแท็บเบราว์เซอร์ของผู้ใช้แทนที่จะเป็น background job
 - **"AI QUALITY" mode**: ยังเป็นเทคนิค client-side ล้วน ๆ (ค้นหาละเอียดขึ้น + interpolation หลายขั้นขึ้น) **ไม่ได้เรียกใช้โมเดล AI จริง** เพราะไม่มี GPU/server
 
@@ -56,5 +64,5 @@
 - `videoBitsPerSecond` เป็นเป้าหมาย/เพดานที่ส่งให้ตัวเข้ารหัสของเบราว์เซอร์ ขนาดไฟล์จริงยังขึ้นกับเนื้อหาวิดีโอด้วย
 - การเพิ่ม FPS ผลลัพธ์ให้สูงกว่าต้นฉบับ ไม่ได้เพิ่มรายละเอียดการเคลื่อนไหวจริง (สุ่มตัวอย่างถี่ขึ้นเท่านั้น)
 - Target Duration ที่ได้จริงอาจคลาดเคลื่อนเล็กน้อยจากที่ตั้งไว้ (ปัดตามจำนวนรอบเต็มของ segment ที่ตรวจพบ)
-- Mode/FPS/Duration สูงขึ้น = ใช้เวลาประมวลผลนานขึ้นมาก (การ encode ทำงานแบบ real-time ผ่าน `MediaRecorder` — วิดีโอผลลัพธ์ยาว 5 นาที ใช้เวลาประมวลผลใกล้เคียง 5 นาทีจริง)
+- Mode/FPS/Duration สูงขึ้น = ใช้เวลาประมวลผลนานขึ้น — แต่ไม่ได้เป็น real-time เสมอไปแล้ว (ดูหัวข้อ "ความเร็วในการประมวลผล" ด้านบน) ยกเว้นตกไปใช้ MediaRecorder fallback ซึ่งยังคง real-time เหมือนเดิม
 - แนะนำให้ใช้ Chrome หรือ Edge เนื่องจาก Safari รองรับ `canvas.captureStream()` ไม่สมบูรณ์

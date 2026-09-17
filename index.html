@@ -606,16 +606,32 @@ fileInput.addEventListener('change', () => {
 async function detectSourceFps(video) {
   if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return 30;
   return new Promise((resolve) => {
+    // The frame-counting path and the safety-timeout path used to race
+    // each other with no guard, so whichever fired first won arbitrarily —
+    // including the hard-coded 30fps fallback sometimes beating real frame
+    // counting under load. That made the "detected" FPS (and therefore
+    // outputFps, blendFrames, and everything downstream) nondeterministic
+    // between otherwise-identical runs. `settled` makes only the first
+    // resolution count and the timeout a true last-resort fallback.
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      video.pause();
+      resolve(value);
+    };
+
     let count = 0;
     let firstTime = null;
     const startWallTime = performance.now();
     const onFrame = (now, metadata) => {
+      if (settled) return;
       count++;
       if (firstTime === null) firstTime = metadata.mediaTime;
       const elapsedWall = performance.now() - startWallTime;
       if (elapsedWall > 600 || count > 40) {
         const elapsedMedia = Math.max(0.05, metadata.mediaTime - firstTime);
-        resolve(count > 1 ? Math.round((count - 1) / elapsedMedia) : 30);
+        finish(count > 1 ? Math.round((count - 1) / elapsedMedia) : 30);
         return;
       }
       video.requestVideoFrameCallback(onFrame);
@@ -623,9 +639,9 @@ async function detectSourceFps(video) {
     try {
       video.requestVideoFrameCallback(onFrame);
       video.play().catch(() => {});
-      setTimeout(() => { video.pause(); video.currentTime = 0; resolve(30); }, 900);
+      setTimeout(() => finish(30), 1500);
     } catch (e) {
-      resolve(30);
+      finish(30);
     }
   });
 }
@@ -1365,7 +1381,14 @@ function audioBufferToStream(audioBuffer) {
 // ============================================================
 // Encoding
 // ============================================================
-async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, audioStream, onProgress) {
+
+// MediaRecorder + canvas.captureStream() is inherently real-time: it can
+// only capture frames as fast as they're drawn against the wall clock, so
+// encoding an N-second output takes roughly N seconds. This is the
+// fallback path — used when the faster WebCodecs path below isn't
+// available (unsupported browser, page opened as a local file where ES
+// module imports are blocked, or the requested codec isn't encodable).
+async function encodeSequenceMediaRecorder(sequence, width, height, fps, bitsPerSecond, mimeType, audioStream, onProgress) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -1405,6 +1428,111 @@ async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeT
   recorder.stop();
   await done;
   return new Blob(chunks, { type: mimeType || 'video/webm' });
+}
+
+// --- WebCodecs (non-realtime) encoding path, via the vendored Mediabunny
+// muxer library. WebCodecs' VideoEncoder/AudioEncoder only produce raw
+// encoded chunks, not a playable file, so a muxer is required to package
+// them into an .mp4/.webm container. This path encodes as fast as the
+// browser's encoder can run rather than waiting on real playback timing,
+// so it's dramatically faster than the MediaRecorder path above for long
+// outputs. It requires the page to be served over http(s) (ES module
+// dynamic import is blocked under file://), so it always has the
+// MediaRecorder path above as a fallback. ---
+
+let _mediabunnyPromise = null;
+function loadMediabunny() {
+  if (!_mediabunnyPromise) {
+    _mediabunnyPromise = import('./vendor/mediabunny.min.mjs');
+  }
+  return _mediabunnyPromise;
+}
+
+const WEBCODECS_VIDEO_CANDIDATES = {
+  mp4: ['avc', 'hevc'],
+  webm: ['vp9', 'av1', 'vp8'],
+};
+
+async function encodeSequenceWebCodecs(sequence, width, height, fps, bitsPerSecond, container, audioBuffer, onProgress) {
+  const M = await loadMediabunny();
+
+  const videoCandidates = WEBCODECS_VIDEO_CANDIDATES[container] || WEBCODECS_VIDEO_CANDIDATES.webm;
+  const videoCodec = await M.getFirstEncodableVideoCodec(videoCandidates, { width, height, bitrate: bitsPerSecond });
+  if (!videoCodec) {
+    throw new Error(`WebCodecs cannot encode any of [${videoCandidates.join(', ')}] in this browser`);
+  }
+
+  let audioCodec = null;
+  if (audioBuffer) {
+    const audioCandidates = container === 'mp4' ? ['aac', 'opus'] : ['opus'];
+    audioCodec = await M.getFirstEncodableAudioCodec(audioCandidates, {
+      numberOfChannels: audioBuffer.numberOfChannels,
+      sampleRate: audioBuffer.sampleRate,
+    });
+    // Audio is a nice-to-have on top of the video; if it can't be encoded
+    // here, proceed silently rather than failing the whole export.
+  }
+
+  const format = container === 'mp4' ? new M.Mp4OutputFormat() : new M.WebMOutputFormat();
+  const output = new M.Output({ format, target: new M.BufferTarget() });
+
+  const videoSource = new M.VideoSampleSource({ codec: videoCodec, bitrate: bitsPerSecond });
+  output.addVideoTrack(videoSource, { frameRate: fps });
+
+  let audioSource = null;
+  if (audioCodec) {
+    audioSource = new M.AudioBufferSource({ codec: audioCodec, bitrate: 128_000 });
+    output.addAudioTrack(audioSource);
+  }
+
+  await output.start();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const drawFrame = (frame) => {
+    if (frame instanceof ImageData) ctx.putImageData(frame, 0, 0);
+    else ctx.drawImage(frame, 0, 0, width, height);
+  };
+
+  const frameDuration = 1 / fps;
+  for (let i = 0; i < sequence.length; i++) {
+    drawFrame(sequence[i]);
+    const sample = new M.VideoSample(canvas, { timestamp: i * frameDuration, duration: frameDuration });
+    await videoSource.add(sample);
+    sample.close();
+    onProgress((i + 1) / sequence.length);
+  }
+
+  if (audioSource) {
+    await audioSource.add(audioBuffer);
+  }
+
+  await output.finalize();
+  const mimeType = container === 'mp4' ? 'video/mp4' : 'video/webm';
+  return new Blob([output.target.buffer], { type: mimeType });
+}
+
+// Tries the fast WebCodecs path first; falls back to the always-available
+// MediaRecorder path on any failure (unsupported browser/codec, blocked
+// module import under file://, etc).
+async function encodeVideo(sequence, width, height, fps, bitsPerSecond, container, mimeType, audioBuffer, onProgress, onMethod) {
+  try {
+    const blob = await encodeSequenceWebCodecs(sequence, width, height, fps, bitsPerSecond, container, audioBuffer, onProgress);
+    if (onMethod) onMethod('webcodecs');
+    return blob;
+  } catch (err) {
+    console.warn('WebCodecs encoding unavailable, falling back to MediaRecorder:', err);
+    if (onMethod) onMethod('mediarecorder', err);
+    const audioStream = audioBuffer ? audioBufferToStream(audioBuffer) : null;
+    const blob = await encodeSequenceMediaRecorder(sequence, width, height, fps, bitsPerSecond, mimeType, audioStream ? audioStream.stream : null, onProgress);
+    if (audioStream) audioStream.ctx.close();
+    return blob;
+  }
 }
 
 // ============================================================
@@ -1575,8 +1703,15 @@ async function runPipeline(manualOverride) {
     setProgress(80, `Stage: เลือก Strategy=${bestAttempt.strategy} Duration=${bestAttempt.duration.toFixed(2)}s (Automatic Retry ${strategiesToTry.length * durationsToTry.length} รอบ)`);
 
     // --- Long-video generation: compute loop count from target duration ---
+    // The 'reverse' (forward+backward ping-pong) strategy outputs roughly
+    // 2x the frames of a single forward pass through the segment, so the
+    // per-loop duration it actually produces must be used here — using
+    // segDuration directly for it would make every generated video come
+    // out roughly 2x longer than the requested target duration.
     const targetDuration = Math.max(5, parseFloat(targetDurationInput.value) || 60);
-    const loopCount = Math.max(1, Math.round(targetDuration / segDuration));
+    const framesPerLoop = bestAttempt.strategy === 'reverse' ? (2 * segFrames.length - 2) : segFrames.length;
+    const perLoopDuration = framesPerLoop / outputFps;
+    const loopCount = Math.max(1, Math.round(targetDuration / perLoopDuration));
 
     // --- Build final full-resolution sequence ---
     setProgress(84, `Stage: Seam Blending + Repeat Until Target Duration (${loopCount} รอบ)...`);
@@ -1590,12 +1725,11 @@ async function runPipeline(manualOverride) {
     renderScoreUI(score);
 
     // --- Audio ---
-    let audioStreamInfo = null;
+    let audioBuffer = null;
     if (audioModeSelect.value === 'keep') {
       setProgress(88, 'Stage: Audio Handling (loop + crossfade)...');
       try {
-        const audioBuffer = await buildLoopedAudioBuffer(sourceFile, candidate.startTime, candidate.endTime, loopCount, Math.min(bestAttempt.duration, 0.5));
-        if (audioBuffer) audioStreamInfo = audioBufferToStream(audioBuffer);
+        audioBuffer = await buildLoopedAudioBuffer(sourceFile, candidate.startTime, candidate.endTime, loopCount, Math.min(bestAttempt.duration, 0.5));
       } catch (e) {
         logStage('  เสียงต้นฉบับใช้ไม่ได้ (ไม่มี audio track หรือถอดรหัสไม่สำเร็จ) — ส่งออกแบบไม่มีเสียงแทน');
       }
@@ -1609,10 +1743,13 @@ async function runPipeline(manualOverride) {
     const mimeType = pickMimeTypeForContainer(container) || pickMimeTypeForContainer('webm');
 
     setProgress(90, 'Stage: Final Encoding...');
-    const blob = await encodeSequence(finalSequence, width, height, outputFps, bitsPerSecond, mimeType, audioStreamInfo ? audioStreamInfo.stream : null, (p) => {
+    const blob = await encodeVideo(finalSequence, width, height, outputFps, bitsPerSecond, container, mimeType, audioBuffer, (p) => {
       setProgress(90 + p * 10, `Stage: Final Encoding... (${Math.round(p * 100)}%)`);
+    }, (method, err) => {
+      logStage(method === 'webcodecs'
+        ? '  ใช้ WebCodecs (encode เร็ว ไม่ real-time)'
+        : `  WebCodecs ใช้ไม่ได้ (${err ? err.message : 'unknown'}) — กลับไปใช้ MediaRecorder (encode แบบ real-time, ช้ากว่า)`);
     });
-    if (audioStreamInfo) audioStreamInfo.ctx.close();
 
     setProgress(100, 'เสร็จสิ้น! (OUTPUT VIDEO)');
     const url = URL.createObjectURL(blob);
