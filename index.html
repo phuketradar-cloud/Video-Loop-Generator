@@ -188,9 +188,26 @@
         <label for="fps">เฟรมเรตของผลลัพธ์ (FPS)</label>
         <select id="fps">
           <option value="24">24</option>
-          <option value="30" selected>30</option>
           <option value="25">25</option>
+          <option value="30" selected>30</option>
+          <option value="48">48</option>
+          <option value="50">50</option>
+          <option value="60">60</option>
         </select>
+        <div class="hint">FPS สูง = ลื่นขึ้นแต่ใช้เวลาประมวลผลนานและไฟล์ใหญ่ขึ้น หากวิดีโอต้นฉบับมี FPS ต่ำกว่าที่ตั้งไว้ บางเฟรมจะถูกสุ่มตัวอย่างซ้ำ (ไม่ได้เพิ่มรายละเอียดการเคลื่อนไหวจริง)</div>
+      </div>
+      <div>
+        <label for="quality">คุณภาพวิดีโอผลลัพธ์ (บิตเรต)</label>
+        <select id="quality">
+          <option value="standard">มาตรฐาน</option>
+          <option value="high" selected>สูง</option>
+          <option value="ultra">สูงมาก (ไฟล์ใหญ่)</option>
+          <option value="custom">กำหนดเอง</option>
+        </select>
+        <div id="customBitrateWrap" style="display:none; margin-top:8px;">
+          <label for="customBitrate">บิตเรตกำหนดเอง (Mbps)</label>
+          <input type="number" id="customBitrate" min="1" max="100" step="0.5" value="20">
+        </div>
       </div>
       <div>
         <label>ข้อมูลคลิปต้นฉบับ</label>
@@ -317,6 +334,12 @@ const resultCard = document.getElementById('resultCard');
 const resultPreview = document.getElementById('resultPreview');
 const downloadLink = document.getElementById('downloadLink');
 const resetBtn = document.getElementById('resetBtn');
+const qualitySelect = document.getElementById('quality');
+const customBitrateWrap = document.getElementById('customBitrateWrap');
+
+qualitySelect.addEventListener('change', () => {
+  customBitrateWrap.style.display = qualitySelect.value === 'custom' ? 'block' : 'none';
+});
 
 let sourceFile = null;
 
@@ -520,7 +543,10 @@ function buildLoopedSequence(frames, loopCount, blendFrames, motionShift) {
 }
 
 function pickMimeType() {
+  // Prefer VP9 (better quality per bit than VP8); AV1 where available is
+  // better still but MediaRecorder support for it is inconsistent.
   const candidates = [
+    'video/webm;codecs=av1',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm'
@@ -531,15 +557,32 @@ function pickMimeType() {
   return '';
 }
 
-async function encodeSequence(sequence, width, height, fps, onProgress) {
+// Bits-per-pixel-per-frame targets per quality tier; scaled by resolution
+// and FPS so higher-res/higher-FPS output gets a proportionally higher
+// bitrate instead of looking worse at the same setting.
+function computeBitsPerSecond(width, height, fps, quality) {
+  if (quality === 'custom') {
+    const mbps = parseFloat(document.getElementById('customBitrate').value) || 20;
+    return Math.round(mbps * 1_000_000);
+  }
+  const bppTable = { standard: 0.06, high: 0.12, ultra: 0.25 };
+  const bpp = bppTable[quality] ?? bppTable.high;
+  return Math.round(width * height * fps * bpp);
+}
+
+async function encodeSequence(sequence, width, height, fps, bitsPerSecond, onProgress) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   const stream = canvas.captureStream(fps);
   const mimeType = pickMimeType();
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const options = mimeType ? { mimeType } : {};
+  if (bitsPerSecond) options.videoBitsPerSecond = bitsPerSecond;
+  const recorder = new MediaRecorder(stream, options);
   const chunks = [];
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -555,10 +598,16 @@ async function encodeSequence(sequence, width, height, fps, onProgress) {
     }
   };
 
+  // Schedule against an absolute start time (rather than chaining
+  // per-iteration setTimeout delays) so timer jitter doesn't accumulate
+  // into drift over long/high-FPS sequences.
+  const start = performance.now();
   for (let i = 0; i < sequence.length; i++) {
     drawFrame(sequence[i]);
     onProgress((i + 1) / sequence.length);
-    await new Promise((r) => setTimeout(r, frameDuration));
+    const target = start + (i + 1) * frameDuration;
+    const wait = Math.max(0, target - performance.now());
+    await new Promise((r) => setTimeout(r, wait));
   }
 
   recorder.stop();
@@ -617,8 +666,11 @@ async function generateLoop() {
   const sequence = buildLoopedSequence(frames, loopCount, blendFrames, motionShift);
   setProgress(55, `เตรียมลำดับเฟรมทั้งหมด ${sequence.length} เฟรม`);
 
+  const quality = qualitySelect.value;
+  const bitsPerSecond = computeBitsPerSecond(width, height, fps, quality);
+
   setProgress(55, 'กำลังเข้ารหัสวิดีโอผลลัพธ์...');
-  const blob = await encodeSequence(sequence, width, height, fps, (p) => {
+  const blob = await encodeSequence(sequence, width, height, fps, bitsPerSecond, (p) => {
     setProgress(55 + p * 45, `กำลังเข้ารหัส... (${Math.round(p * 100)}%)`);
   });
 
