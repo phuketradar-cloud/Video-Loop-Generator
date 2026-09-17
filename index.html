@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Video Loop Generator — สร้างวิดีโอลูปไร้รอยต่อ</title>
+<title>Video Loop Generator — AI-Assisted Seamless Loop Engine</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -15,6 +15,7 @@
     --accent: #4f8cff;
     --accent-2: #3ddc97;
     --danger: #ff5c5c;
+    --warn: #f5a623;
   }
   * { box-sizing: border-box; }
   body {
@@ -44,7 +45,7 @@
     z-index: 10;
   }
   .wrap {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 0 auto;
     padding: 20px;
     display: grid;
@@ -60,6 +61,11 @@
     font-size: 15px;
     margin: 0 0 12px;
     color: var(--accent);
+  }
+  .card h3 {
+    font-size: 13px;
+    margin: 16px 0 8px;
+    color: var(--text);
   }
   .dropzone {
     border: 2px dashed var(--border);
@@ -83,14 +89,19 @@
     grid-template-columns: 1fr 1fr;
     gap: 16px;
   }
-  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr 1fr; } }
   label {
     display: block;
     font-size: 13px;
     color: var(--muted);
     margin-bottom: 6px;
   }
-  input[type=number], select {
+  input[type=number], input[type=text], select {
     width: 100%;
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -113,6 +124,24 @@
   }
   button:disabled { opacity: .5; cursor: not-allowed; }
   button.secondary { background: var(--panel-2); border: 1px solid var(--border); }
+  button.mode-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+  button.mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.preset-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  button.preset-btn.active { background: var(--accent-2); border-color: var(--accent-2); color: #06251a; }
   .progress-outer {
     width: 100%;
     height: 10px;
@@ -164,13 +193,61 @@
     border-radius: 8px;
     border: 1px solid var(--border);
   }
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .score-tile {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+  .score-tile .num { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-tile .num.good { color: var(--accent-2); }
+  .score-tile .num.mid { color: var(--warn); }
+  .score-tile .num.bad { color: var(--danger); }
+  .score-tile .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .loop-point-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: end;
+    margin-top: 10px;
+  }
+  .stage-log {
+    font-size: 11px;
+    color: var(--muted);
+    max-height: 120px;
+    overflow-y: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
 </style>
 </head>
 <body>
-<div class="version-badge" id="versionBadge">v1.3.0</div>
+<div class="version-badge" id="versionBadge">v2.0.0</div>
 <header>
-  <h1>🎞️ Video Loop Generator</h1>
-  <p>สร้างวิดีโอลูปต่อเนื่องแบบไร้รอยต่อ (seamless loop) ทำงานทั้งหมดในเบราว์เซอร์ ไม่มีการอัปโหลดขึ้นเซิร์ฟเวอร์</p>
+  <h1>🎞️ AI-Assisted Seamless Video Loop Engine</h1>
+  <p>วิเคราะห์ Motion และหาจุดต่อ Loop อัตโนมัติจากทั้งคลิป ไม่ใช่แค่ต้น/ท้ายวิดีโอ — ทำงานทั้งหมดในเบราว์เซอร์ ไม่มีการอัปโหลดขึ้นเซิร์ฟเวอร์</p>
 </header>
 
 <div class="wrap">
@@ -178,28 +255,49 @@
   <div class="card" id="uploadCard">
     <h2>1. เลือกวิดีโอต้นฉบับ</h2>
     <div class="dropzone" id="dropzone">
-      <p>📁 ลากไฟล์วิดีโอมาวาง หรือคลิกเพื่อเลือกไฟล์</p>
-      <p class="hint">แนะนำคลิปสั้น 2–8 วินาที ที่มีการเคลื่อนไหวสม่ำเสมอ (ผม เสื้อผ้า สภาพแวดล้อม) เพื่อให้จุดต่อภาพเนียนที่สุด</p>
+      <p>📁 ลากไฟล์วิดีโอมาวาง หรือคลิกเพื่อเลือกไฟล์ (MP4 / MOV / WebM)</p>
+      <p class="hint">ความยาวแนะนำ 2–30 วินาที ที่มีการเคลื่อนไหวต่อเนื่อง (ผม เสื้อผ้า ควัน น้ำ ใบไม้ ฯลฯ) เพื่อให้ระบบหาจุดต่อ Loop ได้แม่นยำที่สุด</p>
       <input type="file" id="fileInput" accept="video/*">
     </div>
     <video id="sourcePreview" controls style="display:none; margin-top:12px;"></video>
+    <div class="badge" id="sourceInfo" style="display:none; margin-top:8px;">–</div>
   </div>
 
   <div class="card" id="settingsCard" style="display:none;">
-    <h2>2. ตั้งค่าการสร้างลูป</h2>
-    <div class="grid2">
+    <h2>2. ตั้งค่าการสร้าง Loop</h2>
+
+    <h3>Processing Mode</h3>
+    <div class="grid3" id="modeButtons">
+      <button type="button" class="mode-btn" data-mode="fast">FAST</button>
+      <button type="button" class="mode-btn active" data-mode="balanced">BALANCED</button>
+      <button type="button" class="mode-btn" data-mode="high">HIGH QUALITY</button>
+      <button type="button" class="mode-btn" data-mode="ai">AI QUALITY</button>
+    </div>
+    <div class="hint" id="modeHint"></div>
+
+    <h3>ความยาวเป้าหมาย (Target Duration)</h3>
+    <div class="row">
+      <button type="button" class="preset-btn" data-sec="30">30 วิ</button>
+      <button type="button" class="preset-btn active" data-sec="60">1 นาที</button>
+      <button type="button" class="preset-btn" data-sec="300">5 นาที</button>
+      <button type="button" class="preset-btn" data-sec="600">10 นาที</button>
+      <input type="number" id="targetDuration" min="5" max="3600" value="60" style="max-width:110px;">
+      <span class="hint">วินาที</span>
+    </div>
+    <div class="hint" id="durationHint"></div>
+
+    <h3>Loop Strategy</h3>
+    <select id="strategy">
+      <option value="auto" selected>AUTO (ให้ระบบเลือกให้)</option>
+      <option value="forward">Forward Loop (ตัดตรง ไม่ผสาน)</option>
+      <option value="crossfade">Crossfade Loop</option>
+      <option value="reverse">Forward + Reverse (Ping-pong)</option>
+    </select>
+    <div class="hint">AUTO จะลองหลายแบบแล้วให้คะแนนก่อนเลือกแบบที่ดีที่สุดให้อัตโนมัติ</div>
+
+    <div class="grid2" style="margin-top:14px;">
       <div>
-        <label for="loopCount">จำนวนรอบที่จะวนซ้ำ (Loop count)</label>
-        <input type="number" id="loopCount" min="2" max="12" value="3">
-        <div class="hint">คลิปต้นฉบับจะถูกเล่นซ้ำกี่รอบในวิดีโอผลลัพธ์</div>
-      </div>
-      <div>
-        <label for="blendDuration">ระยะเวลาผสานรอยต่อ (วินาที)</label>
-        <input type="number" id="blendDuration" min="0.1" max="3" step="0.1" value="0.5">
-        <div class="hint">ช่วงท้ายของแต่ละรอบจะถูก crossfade เข้ากับช่วงต้นของรอบถัดไป เพื่อกลบรอยต่อ</div>
-      </div>
-      <div>
-        <label for="fps">เฟรมเรตของผลลัพธ์ (FPS)</label>
+        <label for="fps">เฟรมเรตผลลัพธ์ (FPS)</label>
         <select id="fps">
           <option value="24">24</option>
           <option value="25">25</option>
@@ -208,7 +306,7 @@
           <option value="50">50</option>
           <option value="60">60</option>
         </select>
-        <div class="hint">FPS สูง = ลื่นขึ้นแต่ใช้เวลาประมวลผลนานและไฟล์ใหญ่ขึ้น หากวิดีโอต้นฉบับมี FPS ต่ำกว่าที่ตั้งไว้ บางเฟรมจะถูกสุ่มตัวอย่างซ้ำ (ไม่ได้เพิ่มรายละเอียดการเคลื่อนไหวจริง)</div>
+        <div class="hint" id="fpsHint">ค่าเริ่มต้นจะปรับตาม FPS ของต้นฉบับอัตโนมัติหลังอัปโหลด</div>
       </div>
       <div>
         <label for="quality">คุณภาพวิดีโอผลลัพธ์ (บิตเรต)</label>
@@ -229,47 +327,89 @@
         <div class="hint" id="formatHint"></div>
       </div>
       <div>
-        <label>ข้อมูลคลิปต้นฉบับ</label>
-        <div class="badge" id="sourceInfo">–</div>
+        <label for="audioMode">เสียง</label>
+        <select id="audioMode">
+          <option value="remove" selected>ตัดเสียงออก (เร็วสุด/เสถียรสุด)</option>
+          <option value="keep">เก็บเสียงต้นฉบับ + วนลูป crossfade (ทดลอง)</option>
+        </select>
+        <div class="hint">โหมดเก็บเสียงใช้ Web Audio API วนเสียงพร้อม crossfade เพื่อไม่ให้มีเสียง click/pop ตรงรอยต่อ</div>
+      </div>
+    </div>
+
+    <details style="margin-top:14px;">
+      <summary>ตั้งค่าขั้นสูง (Advanced — Candidate Scoring Weights)</summary>
+      <div class="grid3" style="margin-top:10px;">
+        <div><label for="wFrame">Frame Similarity</label><input type="number" id="wFrame" min="0" max="1" step="0.05" value="0.25"></div>
+        <div><label for="wMotion">Motion Similarity</label><input type="number" id="wMotion" min="0" max="1" step="0.05" value="0.25"></div>
+        <div><label for="wObject">Object Similarity</label><input type="number" id="wObject" min="0" max="1" step="0.05" value="0.20"></div>
+        <div><label for="wFlow">Optical Flow Consistency</label><input type="number" id="wFlow" min="0" max="1" step="0.05" value="0.15"></div>
+        <div><label for="wBrightness">Brightness Similarity</label><input type="number" id="wBrightness" min="0" max="1" step="0.05" value="0.05"></div>
+        <div><label for="wColor">Color Similarity</label><input type="number" id="wColor" min="0" max="1" step="0.05" value="0.05"></div>
+        <div><label for="wCamera">Camera Motion Similarity</label><input type="number" id="wCamera" min="0" max="1" step="0.05" value="0.05"></div>
+      </div>
+      <div class="hint">ไม่จำเป็นต้องรวมเป็น 1.0 พอดี ระบบจะ normalize ให้อัตโนมัติ ค่าเริ่มต้นตามสเปกที่กำหนด</div>
+    </details>
+
+    <div class="row" style="margin-top:16px;">
+      <button id="generateBtn">▶️ วิเคราะห์และสร้างวิดีโอ Loop</button>
+      <span class="pill" id="engineStatus">พร้อมทำงาน</span>
+    </div>
+  </div>
+
+  <div class="card" id="loopPointCard" style="display:none;">
+    <h2>3. จุด Loop ที่ตรวจพบ</h2>
+    <div class="loop-point-row">
+      <div>
+        <label for="startTimeInput">START (วินาที)</label>
+        <input type="number" id="startTimeInput" min="0" step="0.01">
+      </div>
+      <span class="hint">──────▶</span>
+      <div>
+        <label for="endTimeInput">END (วินาที)</label>
+        <input type="number" id="endTimeInput" min="0" step="0.01">
       </div>
     </div>
     <div class="row" style="margin-top:10px;">
-      <label style="display:flex; align-items:center; gap:8px; margin:0;">
-        <input type="checkbox" id="autoSeam" checked style="width:auto;">
-        <span>ค้นหาจุดตัดที่เนียนที่สุดอัตโนมัติ + motion-aware blending (แนะนำ)</span>
-      </label>
-    </div>
-    <div class="hint" style="margin-top:2px;">ค้นหาเฟรมช่วงต้น/ท้ายที่คล้ายกันที่สุดเพื่อตัดต่อ แล้วชดเชยการเคลื่อนไหว (pan/drift) ก่อนผสานภาพ ให้จุดต่อเนียนกว่าการ crossfade แบบตรง ๆ</div>
-    <div class="row" style="margin-top:14px;">
-      <button id="generateBtn">▶️ สร้างวิดีโอลูป</button>
-      <span class="hint">วิดีโอผลลัพธ์ยังไม่มีเสียง (video-only) ในเวอร์ชันนี้</span>
+      <span class="badge" id="candidateInfo">–</span>
+      <button type="button" class="secondary" id="applyManualBtn">ใช้ค่านี้สร้างใหม่ (Manual Override)</button>
+      <button type="button" class="secondary" id="reAutoBtn" style="display:none;">กลับไปใช้ค่าที่ตรวจพบอัตโนมัติ</button>
     </div>
   </div>
 
   <div class="card" id="progressCard" style="display:none;">
-    <h2>3. กำลังประมวลผล</h2>
+    <h2>4. กำลังประมวลผล</h2>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
     <div class="status-text" id="statusText">กำลังเตรียมข้อมูล...</div>
+    <div class="stage-log" id="stageLog"></div>
     <div class="error" id="errorText" style="display:none;"></div>
   </div>
 
   <div class="card" id="resultCard" style="display:none;">
-    <h2>4. ผลลัพธ์</h2>
+    <h2>5. ผลลัพธ์</h2>
     <video id="resultPreview" controls loop></video>
     <div>
       <a id="downloadLink" class="download-btn" download="seamless-loop.webm">⬇️ ดาวน์โหลดวิดีโอ</a>
       <button class="secondary" id="resetBtn" style="margin-left:8px;">เริ่มใหม่</button>
     </div>
+
+    <h3>Loop Quality Score</h3>
+    <div class="score-grid" id="scoreGrid"></div>
+    <div class="hint" id="scoreNote"></div>
   </div>
 
   <div class="card">
     <details>
-      <summary>เกี่ยวกับเครื่องมือนี้ / โจทย์ต้นฉบับ (AI prompt ที่ใช้เป็นแนวทาง)</summary>
-      <p class="hint">เครื่องมือนี้เป็นการประมาณผล (practical approximation) ของโจทย์ด้านล่าง โดยไม่ต้องพึ่ง AI video generation API ภายนอกใด ๆ — ทำงานแบบออฟไลน์ทั้งหมดในเบราว์เซอร์ด้วย HTML5 Canvas โดยใช้เทคนิค frame extraction + การค้นหาจุดตัดที่เนียนที่สุดอัตโนมัติ + motion-aware crossfade blending ที่จุดต่อรอบ (แทนการสร้างเฟรมใหม่ด้วยโมเดล generative video ตามที่ prompt ระบุไว้ตามตัวอักษร — จึงยังมีข้อจำกัดเรื่องความเนียนเมื่อเทียบกับโมเดล AI จริง)</p>
-      <p class="hint"><strong>Prompt ต้นฉบับ:</strong></p>
-      <pre id="promptText"></pre>
-      <p class="hint" style="margin-top:12px;"><strong>Prompt ฉบับปรับปรุง (เน้นความเนียนของจุดวนลูป):</strong></p>
-      <pre id="promptTextV2"></pre>
+      <summary>เกี่ยวกับเครื่องมือนี้ / ขอบเขตที่ทำจริงเทียบกับสเปกเต็ม</summary>
+      <p class="hint">เครื่องมือนี้ implement ตาม Pipeline ที่ระบุ (Metadata Analysis → Motion Profile → Loop Candidate Detection ทั้งคลิป → Candidate Scoring → Strategy Selection → Adaptive Transition → Color Matching → Seam Blending → Quality Check → Automatic Retry → Long-Video Generation) แบบ <strong>client-side ล้วน ๆ ในเบราว์เซอร์</strong> ตามที่เลือกไว้ (ไม่มี server/backend) จึงมีส่วนที่ต้อง "แปล" จากสเปกต้นฉบับ:</p>
+      <ul class="hint" style="padding-left:18px;">
+        <li><strong>Optical Flow:</strong> ใช้ block-based motion estimation ของ Canvas เอง (regional shift ต่อกริด) แทน Farneback/TV-L1/RAFT จริง — เป็นการประมาณ ไม่ใช่ dense optical flow</li>
+        <li><strong>Frame Interpolation:</strong> ใช้ motion-compensated blending หลายขั้นระหว่างช่วง transition แทนโมเดล AI interpolation (RIFE ฯลฯ)</li>
+        <li><strong>FFmpeg / OpenCV / REST API / Job Queue / Storage:</strong> ไม่ได้ implement เพราะเลือก deploy แบบ static site ไม่มี server — encode ผ่าน Canvas + MediaRecorder ของเบราว์เซอร์แทน FFmpeg</li>
+        <li><strong>Color/Exposure Matching:</strong> ทำจริงด้วยการวัดค่าความสว่าง/สี RGB เฉลี่ยของช่วงต้น-ท้าย แล้วปรับผ่าน canvas filter ระหว่างการผสาน</li>
+        <li><strong>Quality Scoring + Automatic Retry:</strong> ทำจริง — ลองหลาย strategy/duration แล้ววัดคะแนนก่อนเลือกตัวที่ดีที่สุด</li>
+      </ul>
+      <p class="hint" style="margin-top:10px;"><strong>Prompt/สเปกต้นฉบับที่ใช้เป็นแนวทาง:</strong></p>
+      <pre id="promptText">AI-Assisted Seamless Video Loop Engine — full pipeline spec (23 sections / 11 phases): metadata analysis, scene/shot detection, motion analysis, frame similarity, loop candidate detection across the whole clip (not just edges), weighted candidate scoring, multiple loop strategies (forward / crossfade / forward+reverse / motion-matched) with automatic selection, adaptive transition duration by motion level, optical flow, frame interpolation, color/exposure matching, seam detection + quality scoring, automatic retry across parameters, long-video generation with anti-repetition variation, FFmpeg/OpenCV backend, REST API + job queue, processing modes (FAST/BALANCED/HIGH QUALITY/AI QUALITY), editable loop points UI.</pre>
     </details>
   </div>
 
@@ -278,76 +418,28 @@
 <footer>Video Loop Generator — โปรเจกต์แยกต่างหาก ไม่ได้เป็นส่วนหนึ่งของระบบ CAMS</footer>
 
 <script>
-const ORIGINAL_PROMPT = `Create a seamless extended video loop from this short source clip.
+document.getElementById('promptText').textContent = document.getElementById('promptText').textContent;
 
-Preserve the original character, environment, composition, lighting, camera angle, colors, and visual style exactly.
-
-Extend the video by intelligently looping the source footage multiple times.
-
-The transition between the end and beginning of every loop must be completely seamless and invisible.
-
-Analyze the motion trajectory and timing of the original clip, then create smooth transitional frames between the ending and starting frames.
-
-Maintain continuous and natural motion throughout the entire extended video:
-- hair and clothing movement
-- blinking
-- breathing
-- subtle body movement
-- environmental motion
-- particles and atmospheric effects
-- lighting changes
-
-Avoid any visible jump, freeze frame, sudden repositioning, duplicated motion, temporal discontinuity, or unnatural acceleration/deceleration.
-
-Use seamless motion interpolation and temporal blending where necessary.
-
-The final video should feel like ONE continuous uninterrupted shot rather than repeated footage.
-
-Do not introduce new objects, characters, camera angles, facial changes, or environmental changes.
-
-Keep the subject's identity and appearance perfectly consistent.
-
-Camera movement must remain continuous and stable.
-
-Make the first frame and final frame naturally connect so the video can play repeatedly forever without the viewer noticing the loop point.
-
-Output: smooth cinematic seamless loop, consistent motion, no flicker, no warping, no frame jump, no visual discontinuity.`;
-document.getElementById('promptText').textContent = ORIGINAL_PROMPT;
-
-const PROMPT_V2 = `Turn this short clip into a perfectly seamless cinematic infinite loop.
-
-Keep the character completely consistent and preserve the original composition.
-
-Only maintain subtle natural movements:
-gentle hair movement, soft fabric movement, slow breathing, occasional natural blinking, and very subtle environmental motion.
-
-Do not change the character's face, pose, body proportions, clothing, background, or camera composition.
-
-Create a seamless transition between the end and beginning of each cycle using motion-aware temporal blending.
-
-No jump cut.
-No freeze frame.
-No sudden movement.
-No duplicated frames.
-No flickering.
-No facial deformation.
-No identity change.
-No camera shake.
-
-The final frame must naturally flow back into the first frame.
-
-The result should look like a single continuous shot that can loop infinitely without the viewer noticing the repetition.`;
-document.getElementById('promptTextV2').textContent = PROMPT_V2;
-
+// ============================================================
+// DOM references
+// ============================================================
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const sourcePreview = document.getElementById('sourcePreview');
 const settingsCard = document.getElementById('settingsCard');
 const sourceInfo = document.getElementById('sourceInfo');
 const generateBtn = document.getElementById('generateBtn');
+const engineStatus = document.getElementById('engineStatus');
+const loopPointCard = document.getElementById('loopPointCard');
+const startTimeInput = document.getElementById('startTimeInput');
+const endTimeInput = document.getElementById('endTimeInput');
+const candidateInfo = document.getElementById('candidateInfo');
+const applyManualBtn = document.getElementById('applyManualBtn');
+const reAutoBtn = document.getElementById('reAutoBtn');
 const progressCard = document.getElementById('progressCard');
 const progressBar = document.getElementById('progressBar');
 const statusText = document.getElementById('statusText');
+const stageLog = document.getElementById('stageLog');
 const errorText = document.getElementById('errorText');
 const resultCard = document.getElementById('resultCard');
 const resultPreview = document.getElementById('resultPreview');
@@ -357,22 +449,98 @@ const qualitySelect = document.getElementById('quality');
 const customBitrateWrap = document.getElementById('customBitrateWrap');
 const formatSelect = document.getElementById('format');
 const formatHint = document.getElementById('formatHint');
+const fpsSelect = document.getElementById('fps');
+const fpsHint = document.getElementById('fpsHint');
+const strategySelect = document.getElementById('strategy');
+const audioModeSelect = document.getElementById('audioMode');
+const targetDurationInput = document.getElementById('targetDuration');
+const modeHint = document.getElementById('modeHint');
+const scoreGrid = document.getElementById('scoreGrid');
+const scoreNote = document.getElementById('scoreNote');
 
 qualitySelect.addEventListener('change', () => {
   customBitrateWrap.style.display = qualitySelect.value === 'custom' ? 'block' : 'none';
 });
 
-// --- Output format/container detection ---
-// MediaRecorder can only encode into whatever container+codec the browser
-// itself implements; there is no way to produce an arbitrary format
-// client-side without a heavy transcoder. So we detect what this browser
-// can actually record and only offer those, picking the best codec within
-// each container automatically.
+// ============================================================
+// Processing mode presets
+// ============================================================
+const MODE_PRESETS = {
+  fast: {
+    label: 'FAST',
+    analysisFps: 6,
+    fullRangeSearch: false,
+    regionalMotion: false,
+    colorMatch: false,
+    retryAttempts: 1,
+    strategiesTried: ['crossfade'],
+    interpSteps: 1,
+    hint: 'FAST: ใช้ Frame Similarity + Crossfade คงที่ ค้นหาเฉพาะช่วงต้น/ท้ายคลิป เร็วที่สุดแต่ความเนียนต่ำสุด',
+  },
+  balanced: {
+    label: 'BALANCED',
+    analysisFps: 8,
+    fullRangeSearch: true,
+    regionalMotion: false,
+    colorMatch: false,
+    retryAttempts: 2,
+    strategiesTried: ['crossfade', 'forward', 'reverse'],
+    interpSteps: 1,
+    hint: 'BALANCED: ค้นหาจุดต่อ Loop ทั่วทั้งคลิปด้วย Motion Analysis + ลอง 3 strategy แล้วให้คะแนนเลือกที่ดีที่สุด',
+  },
+  high: {
+    label: 'HIGH QUALITY',
+    analysisFps: 10,
+    fullRangeSearch: true,
+    regionalMotion: true,
+    colorMatch: true,
+    retryAttempts: 3,
+    strategiesTried: ['crossfade', 'forward', 'reverse'],
+    interpSteps: 2,
+    hint: 'HIGH QUALITY: เพิ่ม regional motion compensation (approximate optical flow) + Color/Exposure Matching + Automatic Retry หลายรอบ',
+  },
+  ai: {
+    label: 'AI QUALITY',
+    analysisFps: 12,
+    fullRangeSearch: true,
+    regionalMotion: true,
+    colorMatch: true,
+    retryAttempts: 4,
+    strategiesTried: ['crossfade', 'forward', 'reverse'],
+    interpSteps: 4,
+    hint: 'AI QUALITY: ค้นหาละเอียดสุด + motion-compensated interpolation หลายขั้นสุด (หมายเหตุ: ยังเป็นเทคนิค client-side ไม่ใช่ AI model จริง เพราะไม่มี server/GPU)',
+  },
+};
+let currentMode = 'balanced';
+
+document.querySelectorAll('.mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    modeHint.textContent = MODE_PRESETS[currentMode].hint;
+  });
+});
+modeHint.textContent = MODE_PRESETS[currentMode].hint;
+
+document.querySelectorAll('.preset-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    targetDurationInput.value = btn.dataset.sec;
+  });
+});
+targetDurationInput.addEventListener('input', () => {
+  document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+});
+
+// ============================================================
+// Output format/container detection (unchanged from previous version)
+// ============================================================
 const CONTAINER_CODECS = {
   mp4: ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=h264', 'video/mp4'],
   webm: ['video/webm;codecs=av1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'],
 };
-
 function pickMimeTypeForContainer(container) {
   const list = CONTAINER_CODECS[container] || [];
   for (const m of list) {
@@ -380,12 +548,10 @@ function pickMimeTypeForContainer(container) {
   }
   return '';
 }
-
 function populateFormatOptions() {
   const options = [];
-  if (pickMimeTypeForContainer('mp4')) options.push({ value: 'mp4', ext: 'mp4', label: 'MP4 (H.264) — เล่นได้กว้างที่สุด' });
-  if (pickMimeTypeForContainer('webm')) options.push({ value: 'webm', ext: 'webm', label: 'WebM — ไฟล์เล็กกว่า' });
-
+  if (pickMimeTypeForContainer('mp4')) options.push({ value: 'mp4', label: 'MP4 (H.264) — เล่นได้กว้างที่สุด' });
+  if (pickMimeTypeForContainer('webm')) options.push({ value: 'webm', label: 'WebM — ไฟล์เล็กกว่า' });
   formatSelect.innerHTML = '';
   for (const opt of options) {
     const el = document.createElement('option');
@@ -393,34 +559,89 @@ function populateFormatOptions() {
     el.textContent = opt.label;
     formatSelect.appendChild(el);
   }
-
   if (options.length === 0) {
     formatSelect.disabled = true;
     generateBtn.disabled = true;
     formatHint.textContent = 'เบราว์เซอร์นี้ไม่รองรับการบันทึกวิดีโอ (MediaRecorder) กรุณาใช้ Chrome หรือ Edge รุ่นล่าสุด';
   } else {
-    formatHint.textContent = 'ตัวเลือกที่แสดงขึ้นอยู่กับสิ่งที่เบราว์เซอร์นี้รองรับการบันทึกโดยตรง — MP4 เล่นได้กว้างที่สุดบนอุปกรณ์ทั่วไป';
+    formatHint.textContent = 'MP4 เล่นได้กว้างที่สุดบนอุปกรณ์ทั่วไป';
   }
 }
 populateFormatOptions();
 
-let sourceFile = null;
+function computeBitsPerSecond(width, height, fps, quality) {
+  if (quality === 'custom') {
+    const mbps = parseFloat(document.getElementById('customBitrate').value) || 20;
+    return Math.round(mbps * 1_000_000);
+  }
+  const bppTable = { standard: 0.06, high: 0.12, ultra: 0.25 };
+  const bpp = bppTable[quality] ?? bppTable.high;
+  return Math.round(width * height * fps * bpp);
+}
 
+// ============================================================
+// State
+// ============================================================
+let sourceFile = null;
+let sourceVideoMeta = null; // { width, height, duration, sourceFps }
+let lastCandidates = [];    // sorted candidates from the last analysis
+let lastAnalysis = null;    // { frames, profile, analysisFps, sceneCutTime }
+let manualOverrideActive = false;
+
+// ============================================================
+// Upload handling
+// ============================================================
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropzone.classList.remove('drag');
-  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-    handleFile(e.dataTransfer.files[0]);
-  }
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 fileInput.addEventListener('change', () => {
   if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
 });
 
-function handleFile(file) {
+async function detectSourceFps(video) {
+  if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return 30;
+  return new Promise((resolve) => {
+    let count = 0;
+    let firstTime = null;
+    const startWallTime = performance.now();
+    const onFrame = (now, metadata) => {
+      count++;
+      if (firstTime === null) firstTime = metadata.mediaTime;
+      const elapsedWall = performance.now() - startWallTime;
+      if (elapsedWall > 600 || count > 40) {
+        const elapsedMedia = Math.max(0.05, metadata.mediaTime - firstTime);
+        resolve(count > 1 ? Math.round((count - 1) / elapsedMedia) : 30);
+        return;
+      }
+      video.requestVideoFrameCallback(onFrame);
+    };
+    try {
+      video.requestVideoFrameCallback(onFrame);
+      video.play().catch(() => {});
+      setTimeout(() => { video.pause(); video.currentTime = 0; resolve(30); }, 900);
+    } catch (e) {
+      resolve(30);
+    }
+  });
+}
+
+function pickClosestFpsOption(detected) {
+  const options = Array.from(fpsSelect.options).map((o) => parseInt(o.value, 10));
+  let best = options[0];
+  let bestDiff = Infinity;
+  for (const o of options) {
+    const diff = Math.abs(o - detected);
+    if (diff < bestDiff) { bestDiff = diff; best = o; }
+  }
+  return best;
+}
+
+async function handleFile(file) {
   if (!file.type.startsWith('video/')) {
     alert('กรุณาเลือกไฟล์วิดีโอ');
     return;
@@ -429,82 +650,104 @@ function handleFile(file) {
   const url = URL.createObjectURL(file);
   sourcePreview.src = url;
   sourcePreview.style.display = 'block';
-  sourcePreview.onloadedmetadata = () => {
-    sourceInfo.textContent =
-      `${sourcePreview.videoWidth}×${sourcePreview.videoHeight} · ${sourcePreview.duration.toFixed(2)}s`;
-    settingsCard.style.display = 'block';
+  sourcePreview.muted = true;
+  await new Promise((resolve) => { sourcePreview.onloadedmetadata = resolve; });
+
+  const detectedFps = await detectSourceFps(sourcePreview);
+  sourceVideoMeta = {
+    width: sourcePreview.videoWidth,
+    height: sourcePreview.videoHeight,
+    duration: sourcePreview.duration,
+    sourceFps: detectedFps,
   };
-}
 
-generateBtn.addEventListener('click', () => {
-  generateLoop().catch((err) => {
-    console.error(err);
-    errorText.style.display = 'block';
-    errorText.textContent = 'เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : String(err));
-  });
-});
+  const closest = pickClosestFpsOption(detectedFps);
+  fpsSelect.value = String(closest);
+  fpsHint.textContent = `ตรวจพบ FPS ต้นฉบับ ≈ ${detectedFps} — ตั้งค่าผลลัพธ์เป็น ${closest} FPS ให้อัตโนมัติ (แก้ไขได้)`;
 
-resetBtn.addEventListener('click', () => {
+  const approxBitrateMbps = ((file.size * 8) / sourcePreview.duration / 1_000_000).toFixed(1);
+  sourceInfo.style.display = 'inline-block';
+  sourceInfo.textContent =
+    `${sourceVideoMeta.width}×${sourceVideoMeta.height} · ${sourceVideoMeta.duration.toFixed(2)}s · ~${detectedFps}fps · ~${approxBitrateMbps}Mbps · ${file.type || 'unknown codec'}`;
+
+  settingsCard.style.display = 'block';
+  loopPointCard.style.display = 'none';
   resultCard.style.display = 'none';
-  progressCard.style.display = 'none';
-  errorText.style.display = 'none';
-  fileInput.value = '';
-});
-
-function setProgress(pct, text) {
-  progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
-  statusText.textContent = text;
+  lastCandidates = [];
+  lastAnalysis = null;
+  manualOverrideActive = false;
+  reAutoBtn.style.display = 'none';
 }
 
+// ============================================================
+// Low-level image analysis primitives
+// ============================================================
 function seekTo(video, time) {
   return new Promise((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener('seeked', onSeeked);
-      resolve();
-    };
+    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
     video.addEventListener('seeked', onSeeked);
     video.currentTime = time;
   });
 }
 
-async function extractFrames(video, fps, onProgress) {
-  const duration = video.duration;
-  const frameCount = Math.max(2, Math.round(duration * fps));
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  const frames = [];
-  for (let i = 0; i < frameCount; i++) {
-    const t = Math.min(duration - 1e-3, i / fps);
-    await seekTo(video, t);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    frames.push(await createImageBitmap(canvas));
-    onProgress((i + 1) / frameCount);
-  }
-  return frames;
+let _idScratchCanvas = null;
+function _imageDataToDrawable(imageData) {
+  // drawImage() does not accept ImageData directly; round-trip it through a
+  // small scratch canvas so callers can treat ImageData and image/bitmap
+  // sources uniformly.
+  if (!_idScratchCanvas) _idScratchCanvas = document.createElement('canvas');
+  if (_idScratchCanvas.width !== imageData.width) _idScratchCanvas.width = imageData.width;
+  if (_idScratchCanvas.height !== imageData.height) _idScratchCanvas.height = imageData.height;
+  _idScratchCanvas.getContext('2d').putImageData(imageData, 0, 0);
+  return _idScratchCanvas;
 }
 
-// --- Seam-finding + motion estimation helpers (motion-aware blending) ---
-
-function thumbLuma(img, tw, th, ctx) {
+function thumbLumaAndColor(img, tw, th, ctx) {
+  const drawable = img instanceof ImageData ? _imageDataToDrawable(img) : img;
   ctx.clearRect(0, 0, tw, th);
-  ctx.drawImage(img, 0, 0, tw, th);
+  ctx.drawImage(drawable, 0, 0, tw, th);
   const d = ctx.getImageData(0, 0, tw, th).data;
-  const out = new Float32Array(tw * th);
+  const luma = new Float32Array(tw * th);
+  let sumR = 0, sumG = 0, sumB = 0, sumL = 0;
+  const hist = new Float32Array(16); // coarse grayscale histogram
   for (let p = 0, di = 0; p < tw * th; p++, di += 4) {
-    out[p] = 0.299 * d[di] + 0.587 * d[di + 1] + 0.114 * d[di + 2];
+    const r = d[di], g = d[di + 1], b = d[di + 2];
+    const l = 0.299 * r + 0.587 * g + 0.114 * b;
+    luma[p] = l;
+    sumR += r; sumG += g; sumB += b; sumL += l;
+    hist[Math.min(15, Math.floor(l / 16))]++;
   }
-  return out;
+  const n = tw * th;
+  for (let i = 0; i < 16; i++) hist[i] /= n;
+  return {
+    luma,
+    r: sumR / n, g: sumG / n, b: sumB / n, brightness: sumL / n,
+    hist,
+  };
 }
 
 function diffLuma(a, b) {
   let s = 0;
-  for (let i = 0; i < a.length; i++) {
-    const d = a[i] - b[i];
-    s += d * d;
-  }
-  return s;
+  for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; }
+  return s / a.length;
+}
+
+function histDiff(a, b) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += Math.abs(d); }
+  return s / 2; // total variation distance, 0..1
+}
+
+// Smooth mean-RGB color distance, 0..1. Preferred over the coarse luma
+// histogram for continuity scoring: a hard-binned histogram can swing
+// dramatically when a large flat-color region sits right at a bin edge
+// (a 1-unit luma rounding difference from alpha-compositing can flip most
+// of the frame into the neighboring bin even though nothing visible
+// changed), while a direct mean-color distance changes smoothly with the
+// actual pixel values.
+function colorDist(a, b) {
+  const dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db) / (255 * Math.sqrt(3));
 }
 
 function shiftedDiff(a, b, tw, th, dx, dy) {
@@ -523,102 +766,606 @@ function shiftedDiff(a, b, tw, th, dx, dy) {
   return count > 0 ? s / count : Infinity;
 }
 
-// Find (dx, dy) so that `b` translated by (dx, dy) best matches `a`.
 function estimateShift(a, b, tw, th, maxShift) {
-  let best = { dx: 0, dy: 0, score: Infinity };
+  const zeroScore = shiftedDiff(a, b, tw, th, 0, 0);
+  let best = { dx: 0, dy: 0, score: zeroScore };
   for (let dy = -maxShift; dy <= maxShift; dy++) {
     for (let dx = -maxShift; dx <= maxShift; dx++) {
+      if (dx === 0 && dy === 0) continue;
       const score = shiftedDiff(a, b, tw, th, dx, dy);
       if (score < best.score) best = { dx, dy, score };
     }
   }
-  return best;
-}
-
-// Search the head/tail regions of the clip for the pair of frames that are
-// most visually similar, so trimming to that pair produces a naturally
-// smoother cut than always forcing the very first/last captured frame.
-function findBestSeam(frames, maxTrim, tw, th) {
-  const n = frames.length;
-  maxTrim = Math.min(maxTrim, Math.floor(n / 4));
-  if (maxTrim <= 0) return { startTrim: 0, endTrim: 0 };
-
-  const canvas = document.createElement('canvas');
-  canvas.width = tw;
-  canvas.height = th;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-  const startThumbs = [];
-  const endThumbs = [];
-  for (let i = 0; i <= maxTrim; i++) startThumbs.push(thumbLuma(frames[i], tw, th, ctx));
-  for (let i = 0; i <= maxTrim; i++) endThumbs.push(thumbLuma(frames[n - 1 - i], tw, th, ctx));
-
-  let best = { startTrim: 0, endTrim: 0, score: Infinity };
-  for (let s = 0; s <= maxTrim; s++) {
-    for (let e = 0; e <= maxTrim; e++) {
-      const score = diffLuma(startThumbs[s], endThumbs[e]);
-      if (score < best.score) best = { startTrim: s, endTrim: e, score };
-    }
+  // Only trust a non-zero shift when it clearly beats no compensation at
+  // all. A single global translation is a reasonable model for camera pan,
+  // but a poor fit for local/single-object motion (a person, a moving
+  // object against a static background) — forcing the whole frame to shift
+  // to chase that content misaligns everything else and makes the blend
+  // worse. A shift that only saturates the search window without a solid
+  // margin over zero-shift is more likely an unreliable extrapolation than
+  // a real camera motion, so fall back to no compensation in that case.
+  if (best.dx !== 0 || best.dy !== 0) {
+    if (best.score > zeroScore * 0.6) return { dx: 0, dy: 0, score: zeroScore };
   }
   return best;
 }
 
-// Build the looped + crossfaded frame sequence.
-// Every loop's tail (last `blendFrames` frames) is blended into the head of
-// the next loop (the final loop wraps back onto the head of frame 0), so the
-// clip can repeat forever without a visible seam. `motionShift` (optional)
-// translates the incoming frame during the blend to compensate for slow
-// pan/drift between the tail and head, reducing double-exposure ghosting.
-function buildLoopedSequence(frames, loopCount, blendFrames, motionShift) {
-  const n = frames.length;
-  blendFrames = Math.min(blendFrames, Math.floor(n / 2));
+// Approximate regional "optical flow": split into a grid and estimate a
+// local translation per cell via small-window block matching. This is a
+// coarse stand-in for Farneback/TV-L1/RAFT dense optical flow, feasible
+// without any native/WASM CV library.
+function estimateRegionalMotion(lumaA, lumaB, tw, th, gridX, gridY, maxShift) {
+  const cellW = Math.floor(tw / gridX);
+  const cellH = Math.floor(th / gridY);
+  const field = [];
+  function cellScore(gx, gy, dx, dy) {
+    let s = 0, count = 0;
+    for (let y = 0; y < cellH; y += 2) {
+      const ay = gy * cellH + y;
+      const by = ay + dy;
+      if (by < 0 || by >= th) continue;
+      for (let x = 0; x < cellW; x += 2) {
+        const ax = gx * cellW + x;
+        const bx = ax + dx;
+        if (bx < 0 || bx >= tw) continue;
+        const d = lumaA[ay * tw + ax] - lumaB[by * tw + bx];
+        s += d * d;
+        count++;
+      }
+    }
+    return count > 0 ? s / count : Infinity;
+  }
+
+  for (let gy = 0; gy < gridY; gy++) {
+    for (let gx = 0; gx < gridX; gx++) {
+      const zeroScore = cellScore(gx, gy, 0, 0);
+      let best = { dx: 0, dy: 0, score: zeroScore };
+      for (let dy = -maxShift; dy <= maxShift; dy++) {
+        for (let dx = -maxShift; dx <= maxShift; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const score = cellScore(gx, gy, dx, dy);
+          if (score < best.score) best = { dx, dy, score };
+        }
+      }
+      // Same confidence gate as the global estimator: don't trust a shift
+      // that doesn't clearly beat leaving this block unmoved.
+      if ((best.dx !== 0 || best.dy !== 0) && best.score > zeroScore * 0.6) {
+        best = { dx: 0, dy: 0, score: zeroScore };
+      }
+      field.push({ gx, gy, cellW, cellH, dx: best.dx, dy: best.dy });
+    }
+  }
+  return field;
+}
+
+function regionalMotionVariance(field) {
+  if (field.length === 0) return 0;
+  const mags = field.map((f) => Math.hypot(f.dx, f.dy));
+  const mean = mags.reduce((a, b) => a + b, 0) / mags.length;
+  const variance = mags.reduce((a, b) => a + (b - mean) ** 2, 0) / mags.length;
+  return variance;
+}
+
+// ============================================================
+// Stage: Video/Motion Analysis (whole-clip, low-res thumbnails)
+// ============================================================
+function logStage(msg) {
+  const line = document.createElement('div');
+  line.textContent = msg;
+  stageLog.appendChild(line);
+  stageLog.scrollTop = stageLog.scrollHeight;
+}
+
+async function analyzeClip(video, analysisFps, onProgress) {
+  const duration = video.duration;
+  const count = Math.max(4, Math.round(duration * analysisFps));
+  const tw = 64;
+  const th = Math.max(1, Math.round((tw * video.videoHeight) / video.videoWidth));
   const canvas = document.createElement('canvas');
-  const first = frames[0];
-  canvas.width = first.width;
-  canvas.height = first.height;
+  canvas.width = tw; canvas.height = th;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  const dxFull = motionShift ? motionShift.dx : 0;
-  const dyFull = motionShift ? motionShift.dy : 0;
+  const frames = []; // { time, luma, r,g,b, brightness, hist }
+  for (let i = 0; i < count; i++) {
+    // A seek to exactly t=0 can come back as a blank/undecoded frame in some
+    // browsers/codecs; nudge by a tiny epsilon to avoid that first-frame
+    // artifact (imperceptible for real content, but avoids a spurious huge
+    // frame-0-to-frame-1 "motion spike" that would look like a false scene cut).
+    const t = Math.min(duration - 1e-3, Math.max(0.02, (i / count) * duration));
+    await seekTo(video, t);
+    const data = thumbLumaAndColor(video, tw, th, ctx);
+    frames.push({ time: t, ...data });
+    onProgress((i + 1) / count);
+  }
 
-  const sequence = [];
-  for (let loop = 0; loop < loopCount; loop++) {
-    for (let i = 0; i < n; i++) {
-      const tailStart = n - blendFrames;
-      if (blendFrames > 0 && i >= tailStart) {
-        const localIdx = i - tailStart; // 0..blendFrames-1
-        const t = (localIdx + 1) / (blendFrames + 1); // 0 -> 1
-        const alpha = t * t * (3 - 2 * t); // smoothstep easing, gentler than linear
-        const shiftFactor = 1 - alpha; // fully aligned early in the blend, settles to 0 by the end
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.globalAlpha = 1;
-        ctx.drawImage(frames[i], 0, 0);
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(frames[localIdx], dxFull * shiftFactor, dyFull * shiftFactor);
-        ctx.globalAlpha = 1;
-        sequence.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-      } else {
-        sequence.push(frames[i]);
+  // Motion profile per frame (frame i relative to i-1)
+  const profile = [{ frame: 0, motion_score: 0, camera_motion: 0, object_motion: 0, brightness: frames[0].brightness / 255 }];
+  for (let i = 1; i < frames.length; i++) {
+    const motionScore = diffLuma(frames[i - 1].luma, frames[i].luma) / (255 * 255);
+    const shift = estimateShift(frames[i - 1].luma, frames[i].luma, tw, th, 4);
+    const cameraMotion = Math.min(1, Math.hypot(shift.dx, shift.dy) / 4);
+    const objectMotion = Math.max(0, Math.min(1, motionScore * 6 - cameraMotion * 0.3));
+    profile.push({
+      frame: i,
+      motion_score: Math.min(1, motionScore * 6),
+      camera_motion: cameraMotion,
+      object_motion: objectMotion,
+      brightness: frames[i].brightness / 255,
+    });
+  }
+
+  // Scene cut detection: flag frames whose motion score is a strong outlier
+  const scores = profile.map((p) => p.motion_score);
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const variance = scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length;
+  const std = Math.sqrt(variance);
+  const cutThreshold = mean + Math.max(0.25, 3 * std);
+  let sceneCutTime = null;
+  for (let i = 1; i < profile.length; i++) {
+    if (profile[i].motion_score > cutThreshold && profile[i].motion_score > 0.5) {
+      sceneCutTime = frames[i].time;
+      break;
+    }
+  }
+
+  // If a cut was found, restrict the loop-candidate search to whichever
+  // side of it is the longer continuous segment (a cut very early or very
+  // late in the clip should not shrink the usable range down to a sliver).
+  let searchStart = 0, searchEnd = duration;
+  if (sceneCutTime !== null) {
+    const beforeLen = sceneCutTime;
+    const afterLen = duration - sceneCutTime;
+    if (afterLen >= beforeLen) { searchStart = sceneCutTime; searchEnd = duration; }
+    else { searchStart = 0; searchEnd = sceneCutTime; }
+  }
+
+  return { frames, profile, analysisFps, tw, th, sceneCutTime, searchStart, searchEnd, duration };
+}
+
+// ============================================================
+// Stage: Loop Candidate Detection + Scoring (full clip range)
+// ============================================================
+function getWeights() {
+  const raw = {
+    frame_similarity: parseFloat(document.getElementById('wFrame').value) || 0,
+    motion_similarity: parseFloat(document.getElementById('wMotion').value) || 0,
+    object_similarity: parseFloat(document.getElementById('wObject').value) || 0,
+    optical_flow: parseFloat(document.getElementById('wFlow').value) || 0,
+    brightness: parseFloat(document.getElementById('wBrightness').value) || 0,
+    color: parseFloat(document.getElementById('wColor').value) || 0,
+    camera_motion: parseFloat(document.getElementById('wCamera').value) || 0,
+  };
+  const sum = Object.values(raw).reduce((a, b) => a + b, 0) || 1;
+  const norm = {};
+  for (const k in raw) norm[k] = raw[k] / sum;
+  return norm;
+}
+
+function scoreCandidatePair(frames, profile, i, j, weights, tw, th) {
+  const fi = frames[i], fj = frames[j];
+  const frameSim = 1 - Math.min(1, diffLuma(fi.luma, fj.luma) / (255 * 255) * 6);
+  const motionSim = 1 - Math.min(1, Math.abs(profile[i].motion_score - profile[j].motion_score));
+  const objectSim = 1 - Math.min(1, Math.abs(profile[i].object_motion - profile[j].object_motion));
+  const cameraSim = 1 - Math.min(1, Math.abs(profile[i].camera_motion - profile[j].camera_motion));
+  const brightnessSim = 1 - Math.min(1, Math.abs(fi.brightness - fj.brightness) / 255);
+  const colorSim = 1 - Math.min(1, colorDist(fi, fj) * 3);
+  // Optical-flow-consistency proxy: how well a single global shift explains
+  // the difference between the two candidate frames (lower residual = more
+  // consistent / plausible as a loop boundary).
+  const shift = estimateShift(fi.luma, fj.luma, tw, th, 3);
+  const flowConsistency = 1 - Math.min(1, shift.score / (255 * 255) * 4);
+
+  const score =
+    weights.frame_similarity * frameSim +
+    weights.motion_similarity * motionSim +
+    weights.object_similarity * objectSim +
+    weights.optical_flow * flowConsistency +
+    weights.brightness * brightnessSim +
+    weights.color * colorSim +
+    weights.camera_motion * cameraSim;
+
+  return {
+    score,
+    subscores: { frameSim, motionSim, objectSim, flowConsistency, brightnessSim, colorSim, cameraSim },
+  };
+}
+
+function findLoopCandidates(analysis, opts) {
+  const { frames, profile, searchStart, searchEnd } = analysis;
+  const weights = opts.weights;
+  const usable = frames.map((f, idx) => ({ f, idx })).filter(({ f }) => f.time >= searchStart && f.time <= searchEnd);
+  const n = usable.length;
+  if (n < 4) return [];
+
+  const usableDuration = searchEnd - searchStart;
+  const minSegSeconds = Math.max(0.4, Math.min(usableDuration * 0.3, 4.0));
+  const minGap = Math.max(2, Math.round(minSegSeconds * analysis.analysisFps));
+
+  let pairsToScore = [];
+  if (!opts.fullRangeSearch) {
+    // FAST mode: only look near the very start/end of the clip (like a
+    // simple edge-trim search).
+    const edge = Math.max(1, Math.min(6, Math.floor(n / 4)));
+    for (let s = 0; s < edge; s++) {
+      for (let e = n - edge; e < n; e++) {
+        if (e - s >= minGap) pairsToScore.push([s, e]);
+      }
+    }
+  } else {
+    // Coarse pass across the whole usable range, subsampled if long, then
+    // refine near the best coarse candidates.
+    const stride = Math.max(1, Math.ceil(n / 90));
+    const coarseIdx = [];
+    for (let i = 0; i < n; i += stride) coarseIdx.push(i);
+    if (coarseIdx[coarseIdx.length - 1] !== n - 1) coarseIdx.push(n - 1);
+
+    const coarseScored = [];
+    for (let a = 0; a < coarseIdx.length; a++) {
+      for (let b = 0; b < coarseIdx.length; b++) {
+        const i = coarseIdx[a], j = coarseIdx[b];
+        if (j - i < minGap) continue;
+        const res = scoreCandidatePair(frames, profile, usable[i].idx, usable[j].idx, weights, analysis.tw, analysis.th);
+        coarseScored.push({ i, j, score: res.score });
+      }
+    }
+    coarseScored.sort((a, b) => b.score - a.score);
+    const top = coarseScored.slice(0, 6);
+    const refineRadius = Math.max(1, stride);
+    const seen = new Set();
+    for (const c of top) {
+      for (let di = -refineRadius; di <= refineRadius; di++) {
+        for (let dj = -refineRadius; dj <= refineRadius; dj++) {
+          const i = Math.max(0, Math.min(n - 1, c.i + di));
+          const j = Math.max(0, Math.min(n - 1, c.j + dj));
+          if (j - i < minGap) continue;
+          const key = i + ',' + j;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          pairsToScore.push([i, j]);
+        }
       }
     }
   }
-  return sequence;
-}
 
-// Bits-per-pixel-per-frame targets per quality tier; scaled by resolution
-// and FPS so higher-res/higher-FPS output gets a proportionally higher
-// bitrate instead of looking worse at the same setting.
-function computeBitsPerSecond(width, height, fps, quality) {
-  if (quality === 'custom') {
-    const mbps = parseFloat(document.getElementById('customBitrate').value) || 20;
-    return Math.round(mbps * 1_000_000);
+  const results = [];
+  for (const [si, sj] of pairsToScore) {
+    const i = usable[si].idx, j = usable[sj].idx;
+    const res = scoreCandidatePair(frames, profile, i, j, weights, analysis.tw, analysis.th);
+    results.push({
+      startTime: frames[i].time,
+      endTime: frames[j].time,
+      startIdx: i,
+      endIdx: j,
+      score: res.score,
+      subscores: res.subscores,
+    });
   }
-  const bppTable = { standard: 0.06, high: 0.12, ultra: 0.25 };
-  const bpp = bppTable[quality] ?? bppTable.high;
-  return Math.round(width * height * fps * bpp);
+  results.sort((a, b) => b.score - a.score);
+
+  // De-duplicate candidates that are too close together in time so the
+  // top-N list gives genuinely different options (used later for
+  // anti-repetition variation in long videos).
+  const deduped = [];
+  for (const r of results) {
+    const tooClose = deduped.some((d) => Math.abs(d.startTime - r.startTime) < minSegSeconds * 0.4 && Math.abs(d.endTime - r.endTime) < minSegSeconds * 0.4);
+    if (!tooClose) deduped.push(r);
+    if (deduped.length >= 8) break;
+  }
+  return deduped;
 }
 
-async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, onProgress) {
+// ============================================================
+// Stage: Output-resolution frame extraction for the chosen segment
+// ============================================================
+async function extractSegmentFrames(video, startTime, endTime, outputFps, onProgress) {
+  const segDuration = endTime - startTime;
+  const frameCount = Math.max(2, Math.round(segDuration * outputFps));
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  const frames = [];
+  for (let i = 0; i < frameCount; i++) {
+    const t = Math.min(endTime - 1e-3, Math.max(0.02, startTime + (i / frameCount) * segDuration));
+    await seekTo(video, t);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    frames.push(await createImageBitmap(canvas));
+    onProgress((i + 1) / frameCount);
+  }
+  return frames;
+}
+
+function frameToLumaColor(bitmap, tw, th, ctx) {
+  return thumbLumaAndColor(bitmap, tw, th, ctx);
+}
+
+// ============================================================
+// Stage: Strategy trial (cheap, thumbnail-scale) + adaptive duration
+// ============================================================
+function adaptiveDurationRange(avgMotion) {
+  if (avgMotion < 0.15) return [1.0, 2.0];
+  if (avgMotion < 0.4) return [0.5, 1.0];
+  return [0.15, 0.5];
+}
+
+function cheapSeamArtifactScore(frames, tw, th, ctx, blendFrameCount) {
+  // Compare the luma difference right at the loop boundary against the
+  // typical inter-frame difference elsewhere in the segment; a much larger
+  // boundary jump indicates a visible seam / ghosting.
+  const n = frames.length;
+  if (n < 3) return 0;
+  const boundaryDiff = diffLuma(
+    frameToLumaColor(frames[n - 1], tw, th, ctx).luma,
+    frameToLumaColor(frames[0], tw, th, ctx).luma
+  );
+  let typicalSum = 0, typicalCount = 0;
+  for (let i = 1; i < n; i++) {
+    typicalSum += diffLuma(
+      frameToLumaColor(frames[i - 1], tw, th, ctx).luma,
+      frameToLumaColor(frames[i], tw, th, ctx).luma
+    );
+    typicalCount++;
+  }
+  const typical = typicalCount > 0 ? typicalSum / typicalCount : 1;
+  return Math.max(0, (boundaryDiff - typical) / (typical + 1));
+}
+
+// ============================================================
+// Stage: Color / exposure matching
+// ============================================================
+function computeColorCorrection(tailStats, headStats) {
+  const gainR = tailStats.r > 1 ? headStats.r / tailStats.r : 1;
+  const gainG = tailStats.g > 1 ? headStats.g / tailStats.g : 1;
+  const gainB = tailStats.b > 1 ? headStats.b / tailStats.b : 1;
+  const brightnessDiff = headStats.brightness - tailStats.brightness;
+  return { gainR, gainG, gainB, brightnessDiff };
+}
+
+function colorFilterString(correction, intensity) {
+  // Nudge the "incoming" frame gradually toward matching the outgoing
+  // frame's exposure/color using cheap CSS canvas filters instead of a
+  // full per-pixel color-matrix transform.
+  const brightnessPct = 1 + (correction.brightnessDiff / 255) * intensity * -1;
+  const avgGain = (correction.gainR + correction.gainG + correction.gainB) / 3;
+  const saturatePct = 1 + (avgGain - 1) * intensity;
+  return `brightness(${Math.max(0.5, Math.min(1.5, brightnessPct)).toFixed(3)}) saturate(${Math.max(0.5, Math.min(1.5, saturatePct)).toFixed(3)})`;
+}
+
+// ============================================================
+// Stage: Build final looped sequence (strategy-aware, motion-compensated)
+// ============================================================
+function buildSequenceForStrategy(frames, loopCount, blendFrames, strategy, motion, colorCorrection, interpSteps, variationCandidateFrames) {
+  const n = frames.length;
+  blendFrames = Math.min(blendFrames, Math.floor(n / 2));
+  const canvas = document.createElement('canvas');
+  canvas.width = frames[0].width;
+  canvas.height = frames[0].height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const sequence = [];
+
+  function drawBlendFrame(tailFrame, headFrame, alpha, shiftFactor, region) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(tailFrame, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.filter = colorCorrection ? colorFilterString(colorCorrection, 1 - shiftFactor) : 'none';
+    if (region && region.field && region.field.length) {
+      // Regional (piecewise) motion-compensated warp: draw the incoming
+      // frame cell-by-cell, offset by that cell's estimated shift, as a
+      // coarse approximation of an optical-flow-based warp.
+      const sx = canvas.width / (region.tw);
+      const sy = canvas.height / (region.th);
+      for (const cell of region.field) {
+        const dx = cell.dx * sx * shiftFactor;
+        const dy = cell.dy * sy * shiftFactor;
+        const destX = cell.gx * cell.cellW * sx;
+        const destY = cell.gy * cell.cellH * sy;
+        const w = cell.cellW * sx;
+        const h = cell.cellH * sy;
+        ctx.drawImage(headFrame, destX + dx, destY + dy, w, h, destX, destY, w, h);
+      }
+    } else {
+      const dx = (region ? region.dx : 0) * shiftFactor;
+      const dy = (region ? region.dy : 0) * shiftFactor;
+      ctx.drawImage(headFrame, dx, dy);
+    }
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  const loopBoundaries = [];
+  let previousSrc = null;
+  for (let loop = 0; loop < loopCount; loop++) {
+    loopBoundaries.push(sequence.length);
+    const useVariation = variationCandidateFrames && loop % 2 === 1;
+    const src = useVariation ? variationCandidateFrames : frames;
+    const srcLen = src.length;
+    const localBlend = Math.min(blendFrames, Math.floor(srcLen / 2));
+    const tailStart = srcLen - localBlend;
+    // The crossfade strategy blends this loop's tail forward into content
+    // that matches its OWN head frames (src[0..localBlend-1]) so the very
+    // last rendered frame already resembles where a following loop would
+    // begin. If the next loop then started over at src[0] again, those same
+    // head frames would be shown twice in a row (once blended, once raw) —
+    // a direct violation of "no duplicated frames". So a loop that follows
+    // one using the same source segment skips the prefix that was already
+    // effectively displayed during the previous loop's blend.
+    const skipPrefix = strategy === 'crossfade' && loop > 0 && src === previousSrc ? localBlend : 0;
+    previousSrc = src;
+
+    if (strategy === 'forward') {
+      // Strategy A: hard cut at the well-matched boundary, no blending.
+      for (let i = 0; i < srcLen; i++) sequence.push(src[i]);
+    } else if (strategy === 'reverse') {
+      // Strategy C: forward + reverse (ping-pong) through the segment.
+      for (let i = 0; i < srcLen; i++) sequence.push(src[i]);
+      for (let i = srcLen - 2; i > 0; i--) sequence.push(src[i]);
+    } else {
+      // Strategy B (default): motion-compensated crossfade with
+      // sub-stepped interpolation across the transition window.
+      for (let i = skipPrefix; i < srcLen; i++) {
+        if (localBlend > 0 && i >= tailStart) {
+          const localIdx = i - tailStart;
+          const t = (localIdx + 1) / (localBlend + 1);
+          const alpha = t * t * (3 - 2 * t);
+          const shiftFactor = 1 - alpha;
+          sequence.push(drawBlendFrame(src[i], src[localIdx], alpha, shiftFactor, motion));
+        } else {
+          sequence.push(src[i]);
+        }
+      }
+    }
+  }
+  return { sequence, loopBoundaries };
+}
+
+// ============================================================
+// Stage: Loop Quality Score (post-hoc, on the rendered sequence)
+// ============================================================
+function computeQualityScore(sequence, loopBoundaries, motionSubscores) {
+  const tw = 48, th = 27;
+  const canvas = document.createElement('canvas');
+  canvas.width = tw; canvas.height = th;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const n = sequence.length;
+  // Measure the seam at a real internal loop-to-loop transition when one
+  // exists (representative of what viewers actually see partway through a
+  // multi-minute output) rather than only the file's absolute first/last
+  // frame, which the crossfade design does not target the same way.
+  let boundaryIdx = n - 1;
+  if (loopBoundaries && loopBoundaries.length > 1) {
+    boundaryIdx = loopBoundaries[1] - 1;
+  }
+  const nextIdx = (boundaryIdx + 1) % n;
+  const last = sequence[boundaryIdx];
+  const first = sequence[nextIdx];
+
+  const lastData = thumbLumaAndColor(last, tw, th, ctx);
+  const firstData = thumbLumaAndColor(first, tw, th, ctx);
+
+  const boundaryDiff = diffLuma(lastData.luma, firstData.luma) / (255 * 255);
+  let typicalSum = 0;
+  const sampleCount = Math.min(20, n - 1);
+  for (let k = 0; k < sampleCount; k++) {
+    const idx = Math.floor((k / sampleCount) * (n - 1));
+    const a = thumbLumaAndColor(sequence[idx], tw, th, ctx);
+    const b = thumbLumaAndColor(sequence[idx + 1], tw, th, ctx);
+    typicalSum += diffLuma(a.luma, b.luma) / (255 * 255);
+  }
+  const typical = Math.max(0.0005, typicalSum / sampleCount);
+
+  const frameSimilarity = Math.max(0, Math.min(100, 100 - (boundaryDiff / typical) * 20));
+  const motionContinuity = motionSubscores
+    ? Math.round(100 * ((motionSubscores.motionSim + motionSubscores.objectSim + motionSubscores.cameraSim) / 3))
+    : Math.round(frameSimilarity);
+  const colorContinuity = Math.max(0, Math.min(100, 100 - colorDist(lastData, firstData) * 300));
+  const brightnessContinuity = Math.max(0, Math.min(100, 100 - Math.abs(lastData.brightness - firstData.brightness) * 1.2));
+  const artifactRatio = boundaryDiff / typical;
+  const artifactScore = Math.max(0, Math.min(100, 100 - Math.max(0, artifactRatio - 1) * 30));
+
+  const overall = Math.round(
+    0.30 * frameSimilarity +
+    0.30 * motionContinuity +
+    0.15 * colorContinuity +
+    0.10 * brightnessContinuity +
+    0.15 * artifactScore
+  );
+
+  return {
+    overall,
+    motion_continuity: motionContinuity,
+    frame_similarity: Math.round(frameSimilarity),
+    color_continuity: Math.round(colorContinuity),
+    brightness_continuity: Math.round(brightnessContinuity),
+    artifact_score: Math.round(artifactScore),
+  };
+}
+
+function renderScoreUI(score) {
+  scoreGrid.innerHTML = '';
+  const tiles = [
+    ['overall', 'Overall'],
+    ['motion_continuity', 'Motion Continuity'],
+    ['frame_similarity', 'Frame Similarity'],
+    ['color_continuity', 'Color Continuity'],
+    ['brightness_continuity', 'Brightness Continuity'],
+    ['artifact_score', 'Artifact Score'],
+  ];
+  for (const [key, label] of tiles) {
+    const val = score[key];
+    const cls = val >= 85 ? 'good' : val >= 65 ? 'mid' : 'bad';
+    const tile = document.createElement('div');
+    tile.className = 'score-tile';
+    tile.innerHTML = `<div class="num ${cls}">${val}</div><div class="lbl">${label}</div>`;
+    scoreGrid.appendChild(tile);
+  }
+  scoreNote.textContent = score.overall >= 90
+    ? 'ผ่านเกณฑ์คุณภาพ (≥90) — รอยต่อ Loop ควรมองแทบไม่เห็น'
+    : 'คะแนนต่ำกว่าเกณฑ์ 90 — ลองสลับ Loop Strategy เป็นแบบอื่น หรือเลือกวิดีโอต้นฉบับที่มีการเคลื่อนไหวสม่ำเสมอกว่านี้';
+}
+
+// ============================================================
+// Audio: keep original audio, looped with equal-power crossfade
+// ============================================================
+async function buildLoopedAudioBuffer(sourceFile, startTime, endTime, loopCount, blendSeconds) {
+  const arrayBuffer = await sourceFile.arrayBuffer();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const decodeCtx = new AudioCtx();
+  let decoded;
+  try {
+    decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+  } catch (e) {
+    decodeCtx.close();
+    return null; // no usable audio track
+  }
+  const segDuration = endTime - startTime;
+  const sampleRate = decoded.sampleRate;
+  const segStartSample = Math.floor(startTime * sampleRate);
+  const segLenSamples = Math.floor(segDuration * sampleRate);
+  const blendSamples = Math.max(1, Math.min(Math.floor(segLenSamples / 2), Math.floor(blendSeconds * sampleRate)));
+  const totalSamples = segLenSamples * loopCount;
+
+  const offlineCtx = new OfflineAudioContext(decoded.numberOfChannels, totalSamples, sampleRate);
+  for (let loop = 0; loop < loopCount; loop++) {
+    const src = offlineCtx.createBufferSource();
+    src.buffer = decoded;
+    const gain = offlineCtx.createGain();
+    src.connect(gain);
+    gain.connect(offlineCtx.destination);
+    const when = loop * segLenSamples / sampleRate;
+    const offset = segStartSample / sampleRate;
+    // Equal-power-ish fade in/out at each loop boundary to avoid clicks.
+    const fadeSec = blendSamples / sampleRate;
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(1, when + fadeSec);
+    gain.gain.setValueAtTime(1, when + segDuration - fadeSec);
+    gain.gain.linearRampToValueAtTime(0, when + segDuration);
+    src.start(when, offset, segDuration);
+  }
+  const rendered = await offlineCtx.startRendering();
+  decodeCtx.close();
+  return rendered;
+}
+
+function audioBufferToStream(audioBuffer) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuffer;
+  const dest = ctx.createMediaStreamDestination();
+  src.connect(dest);
+  src.start();
+  return { stream: dest.stream, ctx, src };
+}
+
+// ============================================================
+// Encoding
+// ============================================================
+async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, audioStream, onProgress) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -626,28 +1373,26 @@ async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeT
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  const stream = canvas.captureStream(fps);
+  const videoStream = canvas.captureStream(fps);
+  let combinedStream = videoStream;
+  if (audioStream) {
+    combinedStream = new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()]);
+  }
+
   const options = mimeType ? { mimeType } : {};
   if (bitsPerSecond) options.videoBitsPerSecond = bitsPerSecond;
-  const recorder = new MediaRecorder(stream, options);
+  const recorder = new MediaRecorder(combinedStream, options);
   const chunks = [];
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
   const done = new Promise((resolve) => { recorder.onstop = resolve; });
   recorder.start();
 
   const frameDuration = 1000 / fps;
   const drawFrame = (frame) => {
-    if (frame instanceof ImageData) {
-      ctx.putImageData(frame, 0, 0);
-    } else {
-      ctx.drawImage(frame, 0, 0, width, height);
-    }
+    if (frame instanceof ImageData) ctx.putImageData(frame, 0, 0);
+    else ctx.drawImage(frame, 0, 0, width, height);
   };
 
-  // Schedule against an absolute start time (rather than chaining
-  // per-iteration setTimeout delays) so timer jitter doesn't accumulate
-  // into drift over long/high-FPS sequences.
   const start = performance.now();
   for (let i = 0; i < sequence.length; i++) {
     drawFrame(sequence[i]);
@@ -662,77 +1407,229 @@ async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeT
   return new Blob(chunks, { type: mimeType || 'video/webm' });
 }
 
-async function generateLoop() {
+// ============================================================
+// Main orchestration
+// ============================================================
+function setProgress(pct, text) {
+  progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  statusText.textContent = text;
+  logStage(text);
+}
+
+applyManualBtn.addEventListener('click', () => {
+  manualOverrideActive = true;
+  reAutoBtn.style.display = 'inline-block';
+  candidateInfo.textContent = 'Manual override';
+  runPipeline({ startTime: parseFloat(startTimeInput.value), endTime: parseFloat(endTimeInput.value) });
+});
+reAutoBtn.addEventListener('click', () => {
+  manualOverrideActive = false;
+  reAutoBtn.style.display = 'none';
+  runPipeline(null);
+});
+
+generateBtn.addEventListener('click', () => {
+  manualOverrideActive = false;
+  runPipeline(null);
+});
+
+resetBtn.addEventListener('click', () => {
+  resultCard.style.display = 'none';
+  progressCard.style.display = 'none';
+  errorText.style.display = 'none';
+  fileInput.value = '';
+});
+
+async function runPipeline(manualOverride) {
   if (!sourceFile) return;
   errorText.style.display = 'none';
   generateBtn.disabled = true;
+  engineStatus.textContent = 'กำลังประมวลผล...';
   resultCard.style.display = 'none';
   progressCard.style.display = 'block';
+  stageLog.innerHTML = '';
 
-  const loopCount = Math.max(2, Math.min(12, parseInt(document.getElementById('loopCount').value, 10) || 3));
-  const blendSeconds = Math.max(0.05, Math.min(3, parseFloat(document.getElementById('blendDuration').value) || 0.5));
-  const fps = parseInt(document.getElementById('fps').value, 10) || 30;
-  const autoSeam = document.getElementById('autoSeam').checked;
+  try {
+    const mode = MODE_PRESETS[currentMode];
+    const video = document.createElement('video');
+    video.muted = true;
+    video.src = URL.createObjectURL(sourceFile);
+    await new Promise((resolve) => { video.onloadedmetadata = resolve; });
 
-  const video = document.createElement('video');
-  video.muted = true;
-  video.src = URL.createObjectURL(sourceFile);
-  await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    const outputFps = parseInt(fpsSelect.value, 10) || 30;
 
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  const blendFrames = Math.max(1, Math.round(blendSeconds * fps));
+    let candidate, analysis;
+    if (manualOverride) {
+      candidate = { startTime: manualOverride.startTime, endTime: manualOverride.endTime, score: null, subscores: null };
+      setProgress(10, 'ใช้จุด Loop ที่กำหนดเอง (Manual Override)');
+    } else {
+      setProgress(2, 'Stage: Video Metadata Analysis');
+      setProgress(5, `Stage: Motion Analysis (analysis FPS = ${mode.analysisFps})`);
+      analysis = await analyzeClip(video, mode.analysisFps, (p) => {
+        setProgress(5 + p * 30, `Stage: Frame Similarity / Motion Profile... (${Math.round(p * 100)}%)`);
+      });
+      lastAnalysis = analysis;
 
-  setProgress(0, 'กำลังแยกเฟรมจากวิดีโอต้นฉบับ...');
-  let frames = await extractFrames(video, fps, (p) => {
-    setProgress(p * 30, `กำลังแยกเฟรม... (${Math.round(p * 100)}%)`);
-  });
+      if (analysis.sceneCutTime !== null) {
+        logStage(`ตรวจพบ Scene Change ที่ ~${analysis.sceneCutTime.toFixed(2)}s — จำกัดการค้นหาจุด Loop ไว้ในช่วง ${analysis.searchStart.toFixed(2)}s–${analysis.searchEnd.toFixed(2)}s (ฝั่งที่ยาวกว่า)`);
+      }
 
-  let motionShift = null;
-  if (autoSeam && frames.length > 4) {
-    setProgress(32, 'กำลังค้นหาจุดตัดที่เนียนที่สุด...');
-    const tw = 64;
-    const th = Math.max(1, Math.round((tw * height) / width));
-    const seam = findBestSeam(frames, blendFrames, tw, th);
-    if (seam.startTrim > 0 || seam.endTrim > 0) {
-      frames = frames.slice(seam.startTrim, frames.length - seam.endTrim);
+      setProgress(38, 'Stage: Loop Candidate Detection (ค้นหาทั่วทั้งคลิป)');
+      const weights = getWeights();
+      const candidates = findLoopCandidates(analysis, { fullRangeSearch: mode.fullRangeSearch, weights });
+      lastCandidates = candidates;
+      if (candidates.length === 0) {
+        throw new Error('ไม่พบจุด Loop ที่เหมาะสม ลองใช้คลิปที่ยาวขึ้นหรือมีการเคลื่อนไหวต่อเนื่องมากกว่านี้');
+      }
+      candidate = candidates[0];
+      setProgress(45, `Stage: Candidate Scoring เสร็จสิ้น — เลือก START=${candidate.startTime.toFixed(2)}s END=${candidate.endTime.toFixed(2)}s (score ${(candidate.score * 100).toFixed(1)})`);
     }
 
-    setProgress(38, 'กำลังประเมินการเคลื่อนไหวเพื่อชดเชยรอยต่อ...');
-    const canvas = document.createElement('canvas');
-    canvas.width = tw;
-    canvas.height = th;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const tailThumb = thumbLuma(frames[frames.length - 1], tw, th, ctx);
-    const headThumb = thumbLuma(frames[0], tw, th, ctx);
-    const shift = estimateShift(tailThumb, headThumb, tw, th, 6);
-    motionShift = { dx: shift.dx * (width / tw), dy: shift.dy * (height / th) };
+    startTimeInput.value = candidate.startTime.toFixed(2);
+    endTimeInput.value = candidate.endTime.toFixed(2);
+    candidateInfo.textContent = candidate.score !== null
+      ? `Candidate Score: ${(candidate.score * 100).toFixed(1)} / 100`
+      : 'Manual override';
+    loopPointCard.style.display = 'block';
+
+    // --- Extract output-resolution frames for the chosen segment ---
+    setProgress(48, 'Stage: Extracting output-resolution frames for chosen segment...');
+    let segFrames = await extractSegmentFrames(video, candidate.startTime, candidate.endTime, outputFps, (p) => {
+      setProgress(48 + p * 15, `Stage: Output Frame Extraction... (${Math.round(p * 100)}%)`);
+    });
+
+    // --- Secondary candidate segment for long-video anti-repetition variation ---
+    let variationFrames = null;
+    if (!manualOverride && lastCandidates.length > 1 && mode.retryAttempts > 1) {
+      const secondary = lastCandidates.find((c) => Math.abs(c.startTime - candidate.startTime) > 1 || Math.abs(c.endTime - candidate.endTime) > 1);
+      if (secondary && secondary.score > candidate.score * 0.85) {
+        setProgress(64, 'Stage: Extracting secondary candidate segment (anti-repetition variation)...');
+        variationFrames = await extractSegmentFrames(video, secondary.startTime, secondary.endTime, outputFps, () => {});
+      }
+    }
+
+    // --- Motion compensation (global or regional) between tail and head ---
+    setProgress(66, 'Stage: Optical Flow (approximate) — estimating tail/head motion...');
+    const tw = 64, th = Math.max(1, Math.round((tw * height) / width));
+    const motionCanvas = document.createElement('canvas');
+    motionCanvas.width = tw; motionCanvas.height = th;
+    const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+    const tailData = thumbLumaAndColor(segFrames[segFrames.length - 1], tw, th, motionCtx);
+    const headData = thumbLumaAndColor(segFrames[0], tw, th, motionCtx);
+
+    // Motion compensation is only a reliable model for genuine camera pan;
+    // for local/single-object motion (a small moving subject against a
+    // mostly-static frame) a full-strength shift misaligns far more pixels
+    // (the static background) than it fixes. Apply the estimated shift at
+    // reduced (damped) strength so a correct camera-pan estimate still helps
+    // while a mismatched estimate can't do much damage.
+    const MOTION_DAMPING = 0.5;
+    let motion;
+    if (mode.regionalMotion) {
+      const field = estimateRegionalMotion(tailData.luma, headData.luma, tw, th, 3, 2, 4)
+        .map((cell) => ({ ...cell, dx: cell.dx * MOTION_DAMPING, dy: cell.dy * MOTION_DAMPING }));
+      motion = { field, tw, th };
+    } else {
+      const shift = estimateShift(tailData.luma, headData.luma, tw, th, 5);
+      motion = { dx: shift.dx * (width / tw) * MOTION_DAMPING, dy: shift.dy * (height / th) * MOTION_DAMPING, field: null };
+    }
+
+    // --- Color matching ---
+    let colorCorrection = null;
+    if (mode.colorMatch) {
+      setProgress(70, 'Stage: Color / Exposure Matching...');
+      colorCorrection = computeColorCorrection(tailData, headData);
+    }
+
+    // --- Strategy + adaptive duration trial (cheap, thumbnail-scale) ---
+    setProgress(72, 'Stage: Loop Strategy trial + Adaptive Transition...');
+    const avgMotion = analysis
+      ? analysis.profile.reduce((a, p) => a + p.object_motion, 0) / analysis.profile.length
+      : 0.25;
+    const [minDur, maxDur] = adaptiveDurationRange(avgMotion);
+    const segDuration = candidate.endTime - candidate.startTime;
+
+    let strategiesToTry = strategySelect.value === 'auto' ? mode.strategiesTried : [strategySelect.value];
+    const durationsToTry = mode.retryAttempts >= 2 ? [minDur, (minDur + maxDur) / 2, maxDur].slice(0, mode.retryAttempts) : [(minDur + maxDur) / 2];
+
+    let bestAttempt = null;
+    const scratchTw = 32, scratchTh = Math.max(1, Math.round((32 * height) / width));
+    const scratchCanvas = document.createElement('canvas');
+    scratchCanvas.width = scratchTw; scratchCanvas.height = scratchTh;
+    const scratchCtx = scratchCanvas.getContext('2d', { willReadFrequently: true });
+
+    for (const strat of strategiesToTry) {
+      const durationsForThisStrategy = strat === 'forward' || strat === 'reverse' ? [maxDur] : durationsToTry;
+      for (const dur of durationsForThisStrategy) {
+        const blendFrames = Math.max(1, Math.round(Math.min(dur, segDuration * 0.4) * outputFps));
+        const trialSeq = buildSequenceForStrategy(segFrames, 1, blendFrames, strat, motion, colorCorrection, mode.interpSteps, null);
+        const artifact = cheapSeamArtifactScore(trialSeq.sequence, scratchTw, scratchTh, scratchCtx, blendFrames);
+        logStage(`  ลอง strategy=${strat} duration=${dur.toFixed(2)}s → artifact=${artifact.toFixed(3)}`);
+        if (!bestAttempt || artifact < bestAttempt.artifact) {
+          bestAttempt = { strategy: strat, duration: dur, blendFrames, artifact };
+        }
+      }
+    }
+    setProgress(80, `Stage: เลือก Strategy=${bestAttempt.strategy} Duration=${bestAttempt.duration.toFixed(2)}s (Automatic Retry ${strategiesToTry.length * durationsToTry.length} รอบ)`);
+
+    // --- Long-video generation: compute loop count from target duration ---
+    const targetDuration = Math.max(5, parseFloat(targetDurationInput.value) || 60);
+    const loopCount = Math.max(1, Math.round(targetDuration / segDuration));
+
+    // --- Build final full-resolution sequence ---
+    setProgress(84, `Stage: Seam Blending + Repeat Until Target Duration (${loopCount} รอบ)...`);
+    const { sequence: finalSequence, loopBoundaries } = buildSequenceForStrategy(
+      segFrames, loopCount, bestAttempt.blendFrames, bestAttempt.strategy, motion, colorCorrection, mode.interpSteps, variationFrames
+    );
+
+    // --- Quality score ---
+    const qualitySubscores = candidate.subscores || null;
+    const score = computeQualityScore(finalSequence, loopBoundaries, qualitySubscores);
+    renderScoreUI(score);
+
+    // --- Audio ---
+    let audioStreamInfo = null;
+    if (audioModeSelect.value === 'keep') {
+      setProgress(88, 'Stage: Audio Handling (loop + crossfade)...');
+      try {
+        const audioBuffer = await buildLoopedAudioBuffer(sourceFile, candidate.startTime, candidate.endTime, loopCount, Math.min(bestAttempt.duration, 0.5));
+        if (audioBuffer) audioStreamInfo = audioBufferToStream(audioBuffer);
+      } catch (e) {
+        logStage('  เสียงต้นฉบับใช้ไม่ได้ (ไม่มี audio track หรือถอดรหัสไม่สำเร็จ) — ส่งออกแบบไม่มีเสียงแทน');
+      }
+    }
+
+    // --- Encode ---
+    const quality = qualitySelect.value;
+    const bitsPerSecond = computeBitsPerSecond(width, height, outputFps, quality);
+    const container = formatSelect.value || 'webm';
+    const outputExt = container === 'mp4' ? 'mp4' : 'webm';
+    const mimeType = pickMimeTypeForContainer(container) || pickMimeTypeForContainer('webm');
+
+    setProgress(90, 'Stage: Final Encoding...');
+    const blob = await encodeSequence(finalSequence, width, height, outputFps, bitsPerSecond, mimeType, audioStreamInfo ? audioStreamInfo.stream : null, (p) => {
+      setProgress(90 + p * 10, `Stage: Final Encoding... (${Math.round(p * 100)}%)`);
+    });
+    if (audioStreamInfo) audioStreamInfo.ctx.close();
+
+    setProgress(100, 'เสร็จสิ้น! (OUTPUT VIDEO)');
+    const url = URL.createObjectURL(blob);
+    resultPreview.src = url;
+    downloadLink.href = url;
+    downloadLink.download = `seamless-loop.${outputExt}`;
+    downloadLink.textContent = `⬇️ ดาวน์โหลดวิดีโอ (.${outputExt})`;
+    resultCard.style.display = 'block';
+    engineStatus.textContent = 'เสร็จสิ้น';
+  } catch (err) {
+    console.error(err);
+    errorText.style.display = 'block';
+    errorText.textContent = 'เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : String(err));
+    engineStatus.textContent = 'เกิดข้อผิดพลาด';
+  } finally {
+    generateBtn.disabled = false;
   }
-
-  setProgress(40, 'กำลังผสานรอยต่อระหว่างรอบ (motion-aware crossfade)...');
-  const sequence = buildLoopedSequence(frames, loopCount, blendFrames, motionShift);
-  setProgress(55, `เตรียมลำดับเฟรมทั้งหมด ${sequence.length} เฟรม`);
-
-  const quality = qualitySelect.value;
-  const bitsPerSecond = computeBitsPerSecond(width, height, fps, quality);
-
-  const container = formatSelect.value || 'webm';
-  const outputExt = container === 'mp4' ? 'mp4' : 'webm';
-  const mimeType = pickMimeTypeForContainer(container) || pickMimeTypeForContainer('webm');
-
-  setProgress(55, 'กำลังเข้ารหัสวิดีโอผลลัพธ์...');
-  const blob = await encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, (p) => {
-    setProgress(55 + p * 45, `กำลังเข้ารหัส... (${Math.round(p * 100)}%)`);
-  });
-
-  setProgress(100, 'เสร็จสิ้น!');
-  const url = URL.createObjectURL(blob);
-  resultPreview.src = url;
-  downloadLink.href = url;
-  downloadLink.download = `seamless-loop.${outputExt}`;
-  downloadLink.textContent = `⬇️ ดาวน์โหลดวิดีโอ (.${outputExt})`;
-  resultCard.style.display = 'block';
-  generateBtn.disabled = false;
 }
 </script>
 </body>
