@@ -224,6 +224,11 @@
         </div>
       </div>
       <div>
+        <label for="format">รูปแบบไฟล์ผลลัพธ์ (นามสกุล)</label>
+        <select id="format"></select>
+        <div class="hint" id="formatHint"></div>
+      </div>
+      <div>
         <label>ข้อมูลคลิปต้นฉบับ</label>
         <div class="badge" id="sourceInfo">–</div>
       </div>
@@ -252,7 +257,7 @@
     <h2>4. ผลลัพธ์</h2>
     <video id="resultPreview" controls loop></video>
     <div>
-      <a id="downloadLink" class="download-btn" download="seamless-loop.webm">⬇️ ดาวน์โหลดวิดีโอ (.webm)</a>
+      <a id="downloadLink" class="download-btn" download="seamless-loop.webm">⬇️ ดาวน์โหลดวิดีโอ</a>
       <button class="secondary" id="resetBtn" style="margin-left:8px;">เริ่มใหม่</button>
     </div>
   </div>
@@ -350,10 +355,54 @@ const downloadLink = document.getElementById('downloadLink');
 const resetBtn = document.getElementById('resetBtn');
 const qualitySelect = document.getElementById('quality');
 const customBitrateWrap = document.getElementById('customBitrateWrap');
+const formatSelect = document.getElementById('format');
+const formatHint = document.getElementById('formatHint');
 
 qualitySelect.addEventListener('change', () => {
   customBitrateWrap.style.display = qualitySelect.value === 'custom' ? 'block' : 'none';
 });
+
+// --- Output format/container detection ---
+// MediaRecorder can only encode into whatever container+codec the browser
+// itself implements; there is no way to produce an arbitrary format
+// client-side without a heavy transcoder. So we detect what this browser
+// can actually record and only offer those, picking the best codec within
+// each container automatically.
+const CONTAINER_CODECS = {
+  mp4: ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=h264', 'video/mp4'],
+  webm: ['video/webm;codecs=av1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'],
+};
+
+function pickMimeTypeForContainer(container) {
+  const list = CONTAINER_CODECS[container] || [];
+  for (const m of list) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+function populateFormatOptions() {
+  const options = [];
+  if (pickMimeTypeForContainer('mp4')) options.push({ value: 'mp4', ext: 'mp4', label: 'MP4 (H.264) — เล่นได้กว้างที่สุด' });
+  if (pickMimeTypeForContainer('webm')) options.push({ value: 'webm', ext: 'webm', label: 'WebM — ไฟล์เล็กกว่า' });
+
+  formatSelect.innerHTML = '';
+  for (const opt of options) {
+    const el = document.createElement('option');
+    el.value = opt.value;
+    el.textContent = opt.label;
+    formatSelect.appendChild(el);
+  }
+
+  if (options.length === 0) {
+    formatSelect.disabled = true;
+    generateBtn.disabled = true;
+    formatHint.textContent = 'เบราว์เซอร์นี้ไม่รองรับการบันทึกวิดีโอ (MediaRecorder) กรุณาใช้ Chrome หรือ Edge รุ่นล่าสุด';
+  } else {
+    formatHint.textContent = 'ตัวเลือกที่แสดงขึ้นอยู่กับสิ่งที่เบราว์เซอร์นี้รองรับการบันทึกโดยตรง — MP4 เล่นได้กว้างที่สุดบนอุปกรณ์ทั่วไป';
+  }
+}
+populateFormatOptions();
 
 let sourceFile = null;
 
@@ -556,21 +605,6 @@ function buildLoopedSequence(frames, loopCount, blendFrames, motionShift) {
   return sequence;
 }
 
-function pickMimeType() {
-  // Prefer VP9 (better quality per bit than VP8); AV1 where available is
-  // better still but MediaRecorder support for it is inconsistent.
-  const candidates = [
-    'video/webm;codecs=av1',
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm'
-  ];
-  for (const c of candidates) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return '';
-}
-
 // Bits-per-pixel-per-frame targets per quality tier; scaled by resolution
 // and FPS so higher-res/higher-FPS output gets a proportionally higher
 // bitrate instead of looking worse at the same setting.
@@ -584,7 +618,7 @@ function computeBitsPerSecond(width, height, fps, quality) {
   return Math.round(width * height * fps * bpp);
 }
 
-async function encodeSequence(sequence, width, height, fps, bitsPerSecond, onProgress) {
+async function encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, onProgress) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -593,7 +627,6 @@ async function encodeSequence(sequence, width, height, fps, bitsPerSecond, onPro
   ctx.imageSmoothingQuality = 'high';
 
   const stream = canvas.captureStream(fps);
-  const mimeType = pickMimeType();
   const options = mimeType ? { mimeType } : {};
   if (bitsPerSecond) options.videoBitsPerSecond = bitsPerSecond;
   const recorder = new MediaRecorder(stream, options);
@@ -683,8 +716,12 @@ async function generateLoop() {
   const quality = qualitySelect.value;
   const bitsPerSecond = computeBitsPerSecond(width, height, fps, quality);
 
+  const container = formatSelect.value || 'webm';
+  const outputExt = container === 'mp4' ? 'mp4' : 'webm';
+  const mimeType = pickMimeTypeForContainer(container) || pickMimeTypeForContainer('webm');
+
   setProgress(55, 'กำลังเข้ารหัสวิดีโอผลลัพธ์...');
-  const blob = await encodeSequence(sequence, width, height, fps, bitsPerSecond, (p) => {
+  const blob = await encodeSequence(sequence, width, height, fps, bitsPerSecond, mimeType, (p) => {
     setProgress(55 + p * 45, `กำลังเข้ารหัส... (${Math.round(p * 100)}%)`);
   });
 
@@ -692,6 +729,8 @@ async function generateLoop() {
   const url = URL.createObjectURL(blob);
   resultPreview.src = url;
   downloadLink.href = url;
+  downloadLink.download = `seamless-loop.${outputExt}`;
+  downloadLink.textContent = `⬇️ ดาวน์โหลดวิดีโอ (.${outputExt})`;
   resultCard.style.display = 'block';
   generateBtn.disabled = false;
 }
